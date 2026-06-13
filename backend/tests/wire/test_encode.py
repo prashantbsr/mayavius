@@ -238,3 +238,33 @@ def test_t101_degenerate_axis():
 # --------------------------------------------------------------------------- #
 def test_t102_header_and_directory():
     scene = _build_representative_scene()
+    buf = encode_reconstruction(scene)
+    h = _parse_header(buf)
+
+    assert h["magic"] == b"MV4D"
+    assert h["version"] == 1
+    assert h["pos_bits"] == 16
+    assert h["reserved0"] == 0
+    assert h["reserved1"] == 0
+    assert h["reserved2"] == 0
+    assert h["frame_count"] == scene.frame_count
+
+    # all four sections present here
+    expected_flags = (
+        _FLAG_HAS_STATIC
+        | _FLAG_HAS_DYNAMIC
+        | _FLAG_HAS_TRACKS
+        | _FLAG_HAS_CAMERAS
+        | _FLAG_HAS_STATIC_CONF
+        | _FLAG_HAS_TRACK_COLOR
+    )
+    assert h["flags"] == expected_flags
+    assert h["section_count"] == 4
+
+    entries = _parse_directory(buf, h["section_count"])
+    kinds = [e["kind"] for e in entries]
+    assert kinds == [_KIND_STATIC, _KIND_DYNAMIC, _KIND_TRACKS, _KIND_CAMERAS]  # ascending
+
+    for e in entries:
+        assert e["off"] % 8 == 0, f"section kind={e['kind']} offset {e['off']} not 8-aligned"
+        assert e["off"] >= _DIR_OFFSET + h["section_count"] * _DIR_ENTRY_BYTES

@@ -148,3 +148,33 @@ def test_caps_enforced() -> None:
     assert result.static_positions.shape[0] <= MAX_STATIC
     assert result.static_colors.shape[0] == result.static_positions.shape[0]
     assert result.static_conf is not None
+    assert result.static_conf.shape[0] == result.static_positions.shape[0]
+
+    # --- dynamic per-frame cap: every frame <= 20k, colors aligned to positions ---
+    for pos, col in zip(result.dynamic_positions, result.dynamic_colors):
+        assert pos.shape[0] <= MAX_DYNAMIC_PER_FRAME
+        assert pos.shape[0] == col.shape[0]
+    # The over-cap frame (index 0, always kept by the temporal subsample) is exercised:
+    # it must have been thinned to EXACTLY the cap, proving the per-frame cull engaged.
+    assert result.dynamic_positions[0].shape[0] == MAX_DYNAMIC_PER_FRAME
+
+    # --- track cap: M2 <= 4096, with aligned shapes ---
+    M2 = result.tracks.positions.shape[0]
+    assert M2 <= MAX_TRACKS
+    assert result.tracks.positions.shape == (M2, T2, 3)
+    assert result.tracks.visibility.shape == (M2, T2)
+    assert result.tracks.colors is not None
+    assert result.tracks.colors.shape == (M2, 3)
+
+    # dtypes preserved through the cull (the encoder relies on these).
+    assert result.static_positions.dtype == np.float32
+    assert result.static_colors.dtype == np.uint8
+    assert result.static_conf.dtype == np.uint8
+    assert result.tracks.positions.dtype == np.float32
+    assert result.tracks.visibility.dtype == bool
+
+
+def test_caps_static_drops_lowest_conf_first() -> None:
+    """T-104 — static cull keeps the HIGHEST-confidence points (every dropped <= every kept)."""
+    scene = _over_cap_scene()
+    full_conf = np.asarray(scene.static_conf)

@@ -268,3 +268,33 @@ def test_t102_header_and_directory():
     for e in entries:
         assert e["off"] % 8 == 0, f"section kind={e['kind']} offset {e['off']} not 8-aligned"
         assert e["off"] >= _DIR_OFFSET + h["section_count"] * _DIR_ENTRY_BYTES
+        assert e["off"] + e["length"] <= len(buf)
+
+
+def test_t102_flags_bits_match_present_sections():
+    # bit i (0-3) set iff section present in directory.
+    scene = _build_representative_scene()
+    buf = encode_reconstruction(scene)
+    h = _parse_header(buf)
+    entries = _parse_directory(buf, h["section_count"])
+    present_kinds = {e["kind"] for e in entries}
+    bit_for_kind = {
+        _KIND_STATIC: _FLAG_HAS_STATIC,
+        _KIND_DYNAMIC: _FLAG_HAS_DYNAMIC,
+        _KIND_TRACKS: _FLAG_HAS_TRACKS,
+        _KIND_CAMERAS: _FLAG_HAS_CAMERAS,
+    }
+    for kind, bit in bit_for_kind.items():
+        assert bool(h["flags"] & bit) == (kind in present_kinds)
+
+
+# --------------------------------------------------------------------------- #
+# T-103 — AABB spans ALL sections; no point clamps
+# --------------------------------------------------------------------------- #
+def test_t103_aabb_spans_all_sections():
+    # Place each section's extreme in a different region so the AABB MUST
+    # cover static ∪ dynamic ∪ tracks.
+    T = 2
+    static_positions = np.array([[-10.0, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=np.float32)  # min x
+    dyn0 = np.array([[0.0, 50.0, 0.0]], dtype=np.float32)  # max y
+    dyn1 = np.array([[0.0, 0.0, -7.0]], dtype=np.float32)  # min z

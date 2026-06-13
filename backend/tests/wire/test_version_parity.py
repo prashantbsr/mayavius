@@ -28,3 +28,19 @@ def _decoder_ts_path() -> Path:
         / "wire"
         / "decoder.ts"
     )
+
+
+def _ts_mv4d_version() -> int:
+    """Extract the `MV4D_VERSION` literal from `decoder.ts` source."""
+    src = _decoder_ts_path().read_text(encoding="utf-8")
+    # e.g. `export const MV4D_VERSION = 1;`
+    match = re.search(r"MV4D_VERSION\s*=\s*(\d+)", src)
+    assert match is not None, "MV4D_VERSION literal not found in decoder.ts"
+    return int(match.group(1))
+
+
+def test_version_parity() -> None:
+    ts_version = _ts_mv4d_version()
+    assert PY_MV4D_VERSION == 1, PY_MV4D_VERSION
+    assert ts_version == 1, ts_version
+    assert PY_MV4D_VERSION == ts_version, (PY_MV4D_VERSION, ts_version)

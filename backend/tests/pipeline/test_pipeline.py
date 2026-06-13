@@ -88,3 +88,33 @@ def test_lift_axis_flip_is_diag_1_neg1_neg1_under_rotated_camera() -> None:
     theta = np.pi / 2
     R = np.array(
         [[np.cos(theta), -np.sin(theta), 0.0],
+         [np.sin(theta), np.cos(theta), 0.0],
+         [0.0, 0.0, 1.0]],
+        dtype=np.float32,
+    )
+    t = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    c2w = np.eye(4, dtype=np.float32)
+    c2w[:3, :3] = R
+    c2w[:3, 3] = t
+
+    tracks_2d = np.array([[[u, v]]], dtype=np.float32)
+    visibility = np.array([[True]], dtype=bool)
+    intrinsics = np.array([fx, fy, cx, cy], dtype=np.float32)
+
+    positions, vis_out = lift_tracks_to_3d(tracks_2d, visibility, depth, intrinsics, c2w)
+
+    p_cam = np.array([(u - cx) * D / fx, (v - cy) * D / fy, D], dtype=np.float32)
+    p_world = R @ p_cam + t
+    F = np.array([1.0, -1.0, -1.0], dtype=np.float32)
+    expected = (p_world * F).astype(np.float32)
+
+    assert vis_out[0, 0]
+    assert np.allclose(positions[0, 0], expected, atol=1e-4), (positions[0, 0], expected)
+
+
+def test_lift_marks_depth_hole_invisible() -> None:
+    """A sample on a zero/invalid depth pixel is marked invisible (ribbon gap)."""
+    H, W = 20, 20
+    depth = np.zeros((1, H, W), dtype=np.float32)  # all holes
+    tracks_2d = np.array([[[10.0, 10.0]]], dtype=np.float32)
+    visibility = np.array([[True]], dtype=bool)

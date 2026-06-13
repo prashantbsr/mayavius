@@ -58,3 +58,5 @@ test.describe("T-406 share.link", () => {
     } finally {
       await context.close();
     }
+  });
+});

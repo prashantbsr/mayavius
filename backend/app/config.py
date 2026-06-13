@@ -1,6 +1,17 @@
-"""Backend settings (env-driven). All vars are MAYAVIUS_-prefixed; see .env.example."""
+"""Backend settings (env-driven). All vars are MAYAVIUS_-prefixed; see .env.example.
+
+Spec: 06-backend-spec.md §8 (config fields + path anchoring). The runtime dirs
+(RESULT_DIR / UPLOAD_DIR / SAMPLES_DIR) are resolved ABSOLUTELY so a `cd backend`
+run/test command cannot misplace them, and created at import time.
+
+Path anchoring (06 §6/§8): ``parents[1]`` from ``app/config.py`` is ``backend/``;
+``parents[2]`` is the repo root. ``RESULT_DIR`` / ``UPLOAD_DIR`` anchor to
+``backend/``; ``SAMPLES_DIR`` (the example corpus) anchors to the repo root.
+"""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

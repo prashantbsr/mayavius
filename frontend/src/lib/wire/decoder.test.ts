@@ -238,3 +238,33 @@ describe("MV4D decoder — golden conformance (T-202)", () => {
         const got = deq(scene.static!.positionsQ[n * 3 + a], a);
         expect(Math.abs(got - p[a])).toBeLessThanOrEqual(
           expected.posTolerance[a] + 1e-9,
+        );
+      }
+    });
+    expected.static.colors.forEach((c, n) => {
+      for (let a = 0; a < 3; a++) {
+        expect(scene.static!.colors[n * 3 + a]).toBe(c[a]);
+      }
+    });
+    expect(scene.static!.conf).toBeDefined();
+    expected.static.conf.forEach((cv, n) => {
+      expect(scene.static!.conf![n]).toBe(cv);
+    });
+
+    // ---- dynamic ----
+    expected.dynamic.frames.forEach((ef, t) => {
+      const f = scene.dynamic!.frames[t];
+      expect(f.count).toBe(ef.count);
+      ef.positions.forEach((p, n) => {
+        for (let a = 0; a < 3; a++) {
+          const got = deq(f.positionsQ[n * 3 + a], a);
+          expect(Math.abs(got - p[a])).toBeLessThanOrEqual(
+            expected.posTolerance[a] + 1e-9,
+          );
+        }
+      });
+      ef.colors.forEach((c, n) => {
+        for (let a = 0; a < 3; a++) {
+          expect(f.colors[n * 3 + a]).toBe(c[a]);
+        }
+      });

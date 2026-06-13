@@ -28,3 +28,33 @@ export function buildStatic(scene: Mv4dScene): THREE.BufferGeometry | null {
   const g = new THREE.BufferGeometry();
   // u16 positions, normalized → shader reads q/65535 ∈ [0,1] (spec/07 §2.1).
   g.setAttribute(
+    "position",
+    new THREE.BufferAttribute(s.positionsQ, 3, /* normalized */ true),
+  );
+  // u8 sRGB color, normalized → shader reads byte/255 ∈ [0,1].
+  g.setAttribute(
+    "color",
+    new THREE.BufferAttribute(s.colors, 3, /* normalized */ true),
+  );
+
+  // AABB from the scene (one quantization range for all sections, spec/05 §5.1)
+  // — no per-point min/max pass, and positions stay untouched.
+  g.boundingBox = new THREE.Box3(
+    new THREE.Vector3(scene.aabbMin[0], scene.aabbMin[1], scene.aabbMin[2]),
+    new THREE.Vector3(scene.aabbMax[0], scene.aabbMax[1], scene.aabbMax[2]),
+  );
+  g.boundingSphere = g.boundingBox.getBoundingSphere(new THREE.Sphere());
+  return g; // dequant happens in the vertex shader (§2.1)
+}
+
+/** Result of {@link buildDynamic}: one reusable geometry sized to the busiest
+ * frame, plus the backing typed arrays we mutate in place each frame. */
+export interface DynamicGeometry {
+  geometry: THREE.BufferGeometry;
+  /** Max per-frame dynamic point count across all T frames (capacity). */
+  maxCount: number;
+  /** Writable position attribute (u16, normalized) over `positions`. */
+  positionAttr: THREE.BufferAttribute;
+  /** Writable color attribute (u8, normalized) over `colors`. */
+  colorAttr: THREE.BufferAttribute;
+}

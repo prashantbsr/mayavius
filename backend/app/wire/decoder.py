@@ -58,3 +58,33 @@ def decode(buffer: bytes) -> Scene4D:
     and skips unknown kinds. Optional sub-arrays (static conf, track colors) are
     gated by flags bits 4/5.
     """
+    buf = bytes(buffer)
+    if len(buf) < _HEADER_BYTES + _AABB_BYTES:
+        raise ValueError("MV4D buffer too short for header + AABB")
+
+    # ---- header (spec/05 §3.1) ----
+    (
+        magic,
+        version,
+        flags,
+        pos_bits,
+        section_count,
+        frame_count,
+        _reserved0,
+        fps,
+        _reserved1,
+        _reserved2,
+    ) = struct.unpack_from("<4sBBBBHHfII", buf, 0)
+
+    if magic != _MAGIC:
+        raise ValueError(f"bad MV4D magic: {magic!r} (expected {_MAGIC!r})")
+    if version != MV4D_VERSION:
+        raise ValueError(f"unsupported MV4D version: {version} (expected {MV4D_VERSION})")
+    if pos_bits != _POS_BITS:
+        raise ValueError(f"unsupported posBits: {pos_bits} (expected {_POS_BITS})")
+
+    frame_count = int(frame_count)
+
+    # ---- AABB block (spec/05 §3.2) ----
+    aabb = struct.unpack_from("<6f", buf, _HEADER_BYTES)
+    aabb_min = np.array(aabb[0:3], dtype=np.float32)

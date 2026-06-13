@@ -88,3 +88,4 @@ def test_double_flip_path_would_be_wrong():
     bad_c2w[0, 3, 3] = 1.0
 
     pos, _ = lift_tracks_to_3d(tracks, vis, depth, K_px, bad_c2w)
+    assert not np.allclose(pos[0, 0], p_may_true, atol=1e-2)

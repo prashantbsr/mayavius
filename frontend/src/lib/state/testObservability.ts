@@ -58,3 +58,14 @@ export function useTestObservability(): void {
       if (typeof p === "number" && log[log.length - 1] !== p) log.push(p);
     };
     window.__mayaviusProgressLog = log;
+    push(useViewerStore.getState().progress);
+    const unsubscribe = useViewerStore.subscribe((s) => push(s.progress));
+
+    return () => {
+      unsubscribe();
+      delete window.__mayaviusStore;
+      delete window.__mayaviusOnStore;
+      delete window.__mayaviusProgressLog;
+    };
+  }, []);
+}

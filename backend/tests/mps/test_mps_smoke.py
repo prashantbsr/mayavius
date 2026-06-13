@@ -28,3 +28,33 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.mps
+
+# The torch floor (spec/10 §5 T-500 / spec/08 §4.1): first stable MPS autocast.
+_TORCH_FLOOR = (2, 5, 0)
+
+# A bundled ≤3 s sample clip (copied from frontend/e2e/fixtures/tiny.mp4 at W3; the
+# full corpus C-1..C-4 is W4). Lives next to this file so collection has no repo-root
+# dependency.
+_SAMPLE_CLIP = Path(__file__).resolve().parent / "fixtures" / "sample.mp4"
+
+
+def _mps_available() -> bool:
+    """True iff torch is importable AND reports an available MPS backend."""
+    try:
+        import torch
+    except Exception:
+        return False
+    try:
+        return bool(torch.backends.mps.is_available())
+    except Exception:
+        return False
+
+
+def _skip_reason() -> str | None:
+    """Return a skip reason if the smoke preconditions are unmet, else ``None``."""
+    if os.environ.get("MAYAVIUS_RUN_MPS_SMOKE") != "1":
+        return "opt-in flag off: set MAYAVIUS_RUN_MPS_SMOKE=1 (spec/10 §5)"
+    if not _mps_available():
+        return "no MPS backend (torch.backends.mps.is_available() is False) (spec/10 §5)"
+    return None
+

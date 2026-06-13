@@ -238,3 +238,33 @@ def test_caps_frames_are_uniform_temporal_subsample() -> None:
     assert frame_idx[0] == 0
     assert frame_idx[-1] == scene.frame_count - 1
 
+    # Strictly increasing (no duplicate frames after np.unique) and near-uniform:
+    # every gap is within one of the floor/ceil of the ideal stride.
+    diffs = np.diff(frame_idx)
+    assert np.all(diffs >= 1)
+    stride = scene.frame_count / MAX_FRAMES
+    assert int(diffs.max()) <= int(np.ceil(stride)) + 1
+
+
+def test_caps_dynamic_subsample_is_deterministic() -> None:
+    """T-104 — the dynamic per-frame subsample is DETERMINISTIC (fixed seed)."""
+    scene_a = _over_cap_scene(seed=1234)
+    scene_b = _over_cap_scene(seed=1234)  # equal inputs
+
+    out_a = enforce_caps(scene_a)
+    out_b = enforce_caps(scene_b)
+
+    # Identical dynamic point sets across two runs on equal inputs.
+    assert len(out_a.dynamic_positions) == len(out_b.dynamic_positions)
+    for pa, pb in zip(out_a.dynamic_positions, out_b.dynamic_positions):
+        assert np.array_equal(pa, pb)
+    for ca, cb in zip(out_a.dynamic_colors, out_b.dynamic_colors):
+        assert np.array_equal(ca, cb)
+
+    # Re-running on the SAME object is also stable (no hidden global RNG state leak).
+    out_a2 = enforce_caps(scene_a)
+    for pa, pa2 in zip(out_a.dynamic_positions, out_a2.dynamic_positions):
+        assert np.array_equal(pa, pa2)
+
+
+def test_caps_frame_cull_runs_first_keeps_axes_aligned() -> None:

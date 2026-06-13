@@ -118,3 +118,29 @@ describe("viewerStore actions (T-170)", () => {
     expect(s.loadState).toBe("ready");
   });
 
+  it("setLoadState / setProgress / setError / setCameraMode set their fields", () => {
+    useViewerStore.getState().setLoadState("processing");
+    expect(useViewerStore.getState().loadState).toBe("processing");
+    useViewerStore.getState().setProgress(0.5);
+    expect(useViewerStore.getState().progress).toBe(0.5);
+    useViewerStore.getState().setError("boom");
+    expect(useViewerStore.getState().error).toBe("boom");
+    useViewerStore.getState().setCameraMode("asShot");
+    expect(useViewerStore.getState().cameraMode).toBe("asShot");
+  });
+});
+
+// ── T-171: transient-update discipline ────────────────────────────────────────
+describe("viewerStore transient updates (T-171)", () => {
+  it("many rapid setTime calls do not throw and leave a single final value", () => {
+    const N = 1000;
+    expect(() => {
+      for (let i = 0; i <= N; i++) {
+        // Sweep across [0,1]; the loop writes `time` every frame this way.
+        useViewerStore.getState().setTime(i / N);
+      }
+    }).not.toThrow();
+    // One final, well-defined value — not an accumulation or an array.
+    expect(useViewerStore.getState().time).toBe(1);
+  });
+});

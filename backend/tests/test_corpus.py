@@ -58,3 +58,33 @@ def test_corpus_present_and_licensed(slug: str) -> None:
     clip = _clip_path(slug)
     sidecar = _sidecar_path(slug)
 
+    # --- presence (fail clearly by name; never vacuously pass) ---------------
+    assert clip.is_file(), (
+        f"corpus clip missing: {clip} — the Source phase must land a CC-licensed "
+        f"clip for slug {slug!r} (spec/10 §6). RED until sourced; do not weaken."
+    )
+    assert sidecar.is_file(), (
+        f"corpus sidecar missing: {sidecar} — every clip ships "
+        f"{{source_url, license, attribution, duration_s, expected}} (spec/10 §6)."
+    )
+
+    # --- licensing discipline (non-empty license + source_url) ---------------
+    meta = json.loads(sidecar.read_text(encoding="utf-8"))
+    license_tag = str(meta.get("license", "")).strip()
+    source_url = str(meta.get("source_url", "")).strip()
+    assert license_tag, (
+        f"{sidecar} has an empty/missing 'license' — a clip whose license is "
+        f"unverified MUST NOT ship (spec/10 §6 sourcing rule). Slug {slug!r}."
+    )
+    assert source_url, (
+        f"{sidecar} has an empty/missing 'source_url' — record the exact CC "
+        f"source URL (spec/10 §6 sourcing rule). Slug {slug!r}."
+    )
+
+    # --- size cap (committed corpus is small; ~2 MB ceiling) -----------------
+    size = clip.stat().st_size
+    assert size <= MAX_SIZE_BYTES, (
+        f"corpus clip {clip} is {size} bytes, over the {MAX_SIZE_BYTES}-byte cap "
+        f"(spec/10 §6). Re-encode to <=540p/<=3 s — do NOT raise the cap."
+    )
+

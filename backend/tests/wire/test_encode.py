@@ -388,3 +388,33 @@ def test_t105_static_only_emits_only_static():
     assert all(f.shape[0] == 0 for f in out.dynamic_positions)
 
 
+def test_t105_conf_toggle_toggles_subarray():
+    with_conf = encode_reconstruction(_static_only_scene(with_conf=True))
+    without_conf = encode_reconstruction(_static_only_scene(with_conf=False))
+
+    assert _parse_header(with_conf)["flags"] & _FLAG_HAS_STATIC_CONF
+    assert not (_parse_header(without_conf)["flags"] & _FLAG_HAS_STATIC_CONF)
+
+    # the conf sub-array adds exactly N bytes to the static section
+    e_with = _parse_directory(with_conf, 1)[0]
+    e_without = _parse_directory(without_conf, 1)[0]
+    assert e_with["length"] - e_without["length"] == 12  # N=12 u8
+
+    out_with = decode(with_conf)
+    out_without = decode(without_conf)
+    assert out_with.static_conf is not None and out_with.static_conf.shape == (12,)
+    assert out_without.static_conf is None
+
+
+def test_t105_track_color_toggle():
+    T, M = 2, 3
+    rng = np.random.default_rng(9)
+    base = dict(
+        frame_count=T,
+        fps=12.0,
+        aabb_min=np.zeros(3, np.float32),
+        aabb_max=np.ones(3, np.float32),
+        static_positions=np.empty((0, 3), np.float32),
+        static_colors=np.empty((0, 3), np.uint8),
+        static_conf=None,
+        dynamic_positions=[],

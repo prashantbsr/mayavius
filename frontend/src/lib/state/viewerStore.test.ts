@@ -28,3 +28,33 @@ function makeScene(frameCount: number): Mv4dScene {
     version: 1,
     frameCount,
     fps: 24,
+    aabbMin: [0, 0, 0],
+    aabbMax: [1, 1, 1],
+  };
+}
+
+describe("viewerStore defaults", () => {
+  it("starts at the spec defaults", () => {
+    const s = useViewerStore.getState();
+    expect(s.time).toBe(0);
+    expect(s.isPlaying).toBe(false);
+    expect(s.loop).toBe(true);
+    expect(s.frozen).toBe(false);
+    // Added state (spec/07 §4.1).
+    expect(s.scene).toBeNull();
+    expect(s.loadState).toBe("idle");
+    expect(s.progress).toBe(0);
+    expect(s.error).toBeNull();
+    expect(s.cameraMode).toBe("orbit");
+    expect(s.frameCount).toBe(0);
+  });
+});
+
+// ── T-170: actions ────────────────────────────────────────────────────────────
+describe("viewerStore actions (T-170)", () => {
+  it("play / pause set isPlaying", () => {
+    useViewerStore.getState().play();
+    expect(useViewerStore.getState().isPlaying).toBe(true);
+    useViewerStore.getState().pause();
+    expect(useViewerStore.getState().isPlaying).toBe(false);
+  });

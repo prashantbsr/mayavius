@@ -208,3 +208,33 @@ describe("MV4D dequantize helper (T-160)", () => {
         min + (q / 65535) * (max - min),
         9,
       );
+    }
+    // degenerate axis (max == min) → always min (q must be 0 there).
+    expect(dequantize(0, 7.0, 7.0)).toBe(7.0);
+  });
+});
+
+describe("MV4D decoder — golden conformance (T-202)", () => {
+  it("every decoded value equals golden_expected.json", () => {
+    const buffer = readArrayBuffer(GOLDEN_PATH);
+    const scene = decodeReconstruction(buffer);
+
+    // header / AABB — exact (f32 round-trip).
+    expect(scene.version).toBe(expected.version);
+    expect(scene.frameCount).toBe(expected.frameCount);
+    expect(scene.fps).toBeCloseTo(expected.fps, 5);
+    for (let i = 0; i < 3; i++) {
+      expect(scene.aabbMin[i]).toBeCloseTo(expected.aabbMin[i], 5);
+      expect(scene.aabbMax[i]).toBeCloseTo(expected.aabbMax[i], 5);
+    }
+
+    const deq = (q: number, axis: number): number =>
+      dequantize(q, expected.aabbMin[axis], expected.aabbMax[axis]);
+
+    // ---- static ----
+    expect(scene.static!.count).toBe(expected.static.count);
+    expected.static.positions.forEach((p, n) => {
+      for (let a = 0; a < 3; a++) {
+        const got = deq(scene.static!.positionsQ[n * 3 + a], a);
+        expect(Math.abs(got - p[a])).toBeLessThanOrEqual(
+          expected.posTolerance[a] + 1e-9,

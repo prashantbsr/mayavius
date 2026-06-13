@@ -28,3 +28,33 @@ _DIR_OFFSET = _HEADER_BYTES + _AABB_BYTES
 _KIND_STATIC = 1
 _KIND_DYNAMIC = 2
 _KIND_TRACKS = 3
+_KIND_CAMERAS = 4
+
+_FLAG_HAS_STATIC = 1 << 0
+_FLAG_HAS_DYNAMIC = 1 << 1
+_FLAG_HAS_TRACKS = 1 << 2
+_FLAG_HAS_CAMERAS = 1 << 3
+_FLAG_HAS_STATIC_CONF = 1 << 4
+_FLAG_HAS_TRACK_COLOR = 1 << 5
+
+
+# --------------------------------------------------------------------------- #
+# helpers
+# --------------------------------------------------------------------------- #
+def _parse_header(buf: bytes):
+    (
+        magic,
+        version,
+        flags,
+        pos_bits,
+        section_count,
+        frame_count,
+        reserved0,
+        fps,
+        reserved1,
+        reserved2,
+    ) = struct.unpack_from("<4sBBBBHHfII", buf, 0)
+    return {
+        "magic": magic,
+        "version": version,
+        "flags": flags,

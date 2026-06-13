@@ -28,3 +28,33 @@ test.describe("T-404 playback.toggle", () => {
     await expect
       .poll(() => storeField<boolean>(page, "isPlaying"), { timeout: 5_000 })
       .toBe(true);
+    // time advanced past 0 (the R3F loop writes setTime while playing).
+    await expect
+      .poll(() => storeField<number>(page, "time"), {
+        timeout: 5_000,
+        intervals: [50, 100],
+      })
+      .toBeGreaterThan(0);
+
+    // ── Pause → isPlaying false and time stops advancing. ───────────────────────
+    await pauseBtn.click({ force: true });
+    await expect
+      .poll(() => storeField<boolean>(page, "isPlaying"), { timeout: 5_000 })
+      .toBe(false);
+    const tA = (await storeField<number>(page, "time")) ?? -1;
+    await page.waitForTimeout(300); // would advance if still playing
+    const tB = (await storeField<number>(page, "time")) ?? -1;
+    expect(tB).toBeCloseTo(tA, 5); // halted
+
+    // ── Loop wrap: with loop=true, playing past time=1 wraps back into [0,1). ────
+    // Seed near the end, then play; the loop's `next % 1` wraps it (spec/07 §5).
+    await scrubTimeline(page, 'input[aria-label="Timeline"]', 0.97, 0.97, 1);
+    expect(await storeField<boolean>(page, "loop")).toBe(true);
+    await playBtn.click({ force: true });
+    // Observe the wrap: time returns to a small value (< the 0.97 we seeded) while
+    // still playing — i.e. it crossed 1 and wrapped, not clamped at 1.
+    await expect
+      .poll(() => storeField<number>(page, "time"), {
+        timeout: 6_000,
+        intervals: [30, 60, 100],
+      })

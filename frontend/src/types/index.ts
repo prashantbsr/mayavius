@@ -1,13 +1,14 @@
 // Shared frontend types.
 //
-// The AUTHORITATIVE data shapes — exact byte layout, quantization ranges, how
-// tracks reference points, per-frame visibility encoding — are defined by
+// The AUTHORITATIVE data shape — exact byte layout, quantization ranges, how
+// tracks reference points, per-frame visibility encoding — is defined by
 // spec/05-data-contract.md and MUST match the backend encoder exactly. The
-// types below are minimal placeholders so the scaffold type-checks; they are
-// NOT the final contract.
+// decoded type below (`Mv4dScene`) is spec/05 §5.2 verbatim; it replaces the
+// old placeholder `ReconstructionResult`.
 
-/** Lifecycle of an async reconstruction job (backend: spec/06-backend-spec.md). */
-export type JobStatus = "queued" | "running" | "succeeded" | "failed";
+/** Lifecycle of an async reconstruction job (backend: spec/06-backend-spec.md
+ * §6 — the terminal value the backend emits is `"done"`, NOT `"succeeded"`). */
+export type JobStatus = "queued" | "running" | "done" | "failed";
 
 export interface JobHandle {
   id: string;

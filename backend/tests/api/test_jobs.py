@@ -178,3 +178,33 @@ def test_adapter_contract(adapter_factory) -> None:
     assert scene.static_positions.shape[0] <= 150_000
     assert len(scene.dynamic_positions) == scene.frame_count
     for frame in scene.dynamic_positions:
+        assert frame.shape[0] <= 20_000
+        assert frame.shape[1] == 3 if frame.shape[0] else True
+    if scene.tracks is not None:
+        assert scene.tracks.positions.shape[0] <= 4_096
+        assert scene.tracks.positions.shape[1] == scene.frame_count
+        assert scene.tracks.positions.shape[2] == 3
+    # Frame cap is honored relative to the request (FixtureAdapter takes min).
+    assert scene.frame_count <= req.max_frames
+
+
+# The OPTIONAL model adapters are HONEST STUBS (W3.T5, spec/06 §4.3/§4.4/§4.5/§4.7):
+# on the Mac's local devices ("mps"/"cpu") their reconstruct() raises
+# UnsupportedDeviceError (NOT a silent fall-back), naming the CUDA/no-MPS/unverified
+# constraint + pointing at the cloud-GPU deploy (spec/11). This is the W1→W3.T5
+# cutover the suite header (spec/10 T-310) anticipated — the W1 NotImplementedError
+# placeholder is replaced by the device-refusing honest stub. The full per-adapter
+# contract (message content, the @pytest.mark.gpu on-device test) lives in
+# tests/adapters/test_optional_adapters.py.
+#
+# The default-combo halves — VggtAdapter + CoTracker3Adapter — landed their real
+# reconstruct() in W3.T2/T3, so they MOVED OUT of this "optional" list (their module
+# import stays torch-free — asserted by test_default_adapters_module_import_is_torch_free
+# below — and their on-device reconstruct() is exercised by the gated T-310 / T-510
+# mps suite).
+@pytest.mark.parametrize(
+    "module_name, class_name",
+    [
+        ("app.adapters.spatialtracker_adapter", "SpatialTrackerV2Adapter"),
+        ("app.adapters.pi3_adapter", "Pi3Adapter"),
+        ("app.adapters.open_d4rt_adapter", "OpenD4RTAdapter"),

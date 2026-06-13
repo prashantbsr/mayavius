@@ -1,0 +1,14 @@
+[project]
+name = "mayavius-backend"
+version = "0.0.0"
+description = "Feedforward 4D scene reconstruction backend (hexagonal architecture)."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

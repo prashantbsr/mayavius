@@ -1,5 +1,9 @@
 "use client";
 
+import { useViewerStore } from "@/lib/state/viewerStore";
+import { PointCloud } from "./PointCloud";
+import { TrackRibbons } from "./TrackRibbons";
+
 // Scene graph for the 4D viewer.
 //
 // MVP render path (Path 1 — LOCKED, handover §4.1): animated colored point

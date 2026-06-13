@@ -28,3 +28,33 @@ from app.core.domain.models import ReconstructionRequest
 _OPTIONAL_ADAPTERS = [
     pytest.param(
         "app.adapters.spatialtracker_adapter",
+        "SpatialTrackerV2Adapter",
+        "CUDA",
+        id="spatialtracker_v2",
+    ),
+    pytest.param(
+        "app.adapters.pi3_adapter",
+        "Pi3Adapter",
+        "MPS",
+        id="pi3",
+    ),
+    pytest.param(
+        "app.adapters.open_d4rt_adapter",
+        "OpenD4RTAdapter",
+        "MPS",
+        id="open_d4rt",
+    ),
+]
+
+
+def _build(module_name: str, class_name: str):
+    import importlib
+
+    cls = getattr(importlib.import_module(module_name), class_name)
+    return cls(None)
+
+
+def _cuda_available() -> bool:
+    """True iff torch is importable AND reports an available CUDA device."""
+    try:
+        import torch

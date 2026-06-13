@@ -28,3 +28,33 @@ export default defineConfig({
       // assertion __mayaviusDebug.staticPointCount > 0 only passes once the R3F
       // <Canvas> actually rendered — see T-401).
       name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          args: [
+            "--enable-unsafe-swiftshader",
+            "--ignore-gpu-blocklist",
+            "--use-gl=angle",
+            "--use-angle=swiftshader",
+            "--enable-webgl",
+          ],
+        },
+      },
+    },
+    {
+      // WebKit runs the T-400 smoke ONLY (landing render) — it catches Safari/
+      // WebGL2 differences for the landing, but headless WebKit has no reliable
+      // software WebGL2 path here, so it asserts NO WebGL (spec/10 §4: "WebKit
+      // project runs the smoke path (T-400)").
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] },
+      testMatch: /landing\.spec\.ts/,
+    },
+  ],
+  webServer: [
+    {
+      command:
+        "cd ../backend && MAYAVIUS_ADAPTER=fake ./.venv/bin/python -m uvicorn app.main:app --port 8000",
+      url: "http://localhost:8000/health",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,

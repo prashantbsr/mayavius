@@ -28,3 +28,33 @@ test.describe("T-405 bullet_time.orbit", () => {
   }) => {
     await openLoadedViewer(page, "example");
 
+    // Park time mid-clip so frozen frameIndex is a stable, non-edge value.
+    await page.$eval('input[aria-label="Timeline"]', (el) => {
+      const input = el as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(input, "0.5");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForTimeout(60);
+
+    // ── Enter bullet-time → frozen true, playback halted (spec/07 §5). ──────────
+    await page.getByRole("button", { name: /bullet.?time/i }).click({
+      force: true,
+    });
+    await expect
+      .poll(() => storeField<boolean>(page, "frozen"), { timeout: 5_000 })
+      .toBe(true);
+    expect(await storeField<boolean>(page, "isPlaying")).toBe(false);
+    expect(await storeField<string>(page, "cameraMode")).toBe("bulletTime");
+
+    // The render debug surface's `frameIndex` is published by the R3F loop, so it
+    // can lag the (synchronous) store write by a frame. Derive the expected frozen
+    // frame from the store (time × frameCount) and wait until the debug surface has
+    // SETTLED to it before treating it as the baseline — otherwise we might capture
+    // a stale value and see it "change" after the drag (which would be the surface
+    // catching up, not time advancing). Once frozen, time cannot advance, so this
+    // settle is a one-time convergence, not a moving target.
+    const expectedFrame = await page.evaluate(() => {

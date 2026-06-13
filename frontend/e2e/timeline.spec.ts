@@ -58,3 +58,15 @@ test.describe("T-403 timeline.scrub", () => {
     expect(
       frames.size,
       `frameIndex should span >1 frame across a full scrub, saw ${JSON.stringify([...frames])}`,
+    ).toBeGreaterThan(1);
+
+    // And specifically: frame at time=1 differs from frame at time=0.
+    await scrubTimeline(page, scrubber, 0, 0, 1);
+    await page.waitForTimeout(60);
+    const f0 = await debugNumber(page, "frameIndex", -1);
+    await scrubTimeline(page, scrubber, 1, 1, 1);
+    await page.waitForTimeout(60);
+    const f1 = await debugNumber(page, "frameIndex", -1);
+    expect(f1).not.toBe(f0);
+  });
+});

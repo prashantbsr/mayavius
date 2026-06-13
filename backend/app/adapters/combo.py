@@ -88,3 +88,33 @@ class VggtCoTracker3Adapter(ReconstructionPort):
           1. decode + subsample the clip ONCE → the shared width-518 frame set
              (grid-consistency: VGGT and CoTracker3 consume the SAME frames,
              spec/06 §5 step 4);
+          2. ``VggtAdapter.run_geometry`` → ``GeometryResult`` (world points + conf,
+             depth + conf, per-frame camera, ALL in mayavius world space) — VGGT runs
+             ONCE here and its depth/camera/intrinsics feed the lift;
+          3. ``CoTracker3Adapter.run_tracks`` lifts the 2D tracks to 3D using VGGT's
+             ``depth`` / ``camera`` / pixel intrinsics → ``TrackResult``;
+          4. ``assemble_scene4d`` does the static/dynamic split → a RAW ``Scene4D``.
+
+        Returns the RAW scene; the core ``ReconstructionService`` applies
+        smoothing/culling/caps (spec/06 §5 steps 6-7) — NOT done here.
+        """
+        vggt = self._vggt_adapter()
+        cot = self._cot_adapter()
+
+        frames = decode_and_subsample(request)  # numpy uint8 [S,3,H,W] @ width 518
+        # MPS self-attention OOM guard: cap S so S·tokens-per-frame fits memory (a
+        # square/high-res clip OOMs the default max_clip_frames on a 36 GB Mac;
+        # decision-log §J.1). Both VGGT and CoTracker3 consume these SAME frames, so
+        # the cap preserves grid-consistency. CUDA/cloud lifts the cap.
+        if str(getattr(request, "device", "mps")) == "mps":
+            frames = cap_frames_to_token_budget(frames)
+        if progress is not None:
+            progress(0.10, "decode")
+
+        # VGGT runs ONCE; geo carries depth + camera (+ pixel intrinsics on the SAME
+        # processed grid, attached by run_geometry as geo.intrinsics_px) for the lift.
+        geo = vggt.run_geometry(frames, request)
+        if progress is not None:
+            progress(0.55, "vggt")
+
+        # Feed VGGT's depth/camera/pixel-intrinsics to the CoTracker3 lift (grid

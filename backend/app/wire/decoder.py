@@ -148,3 +148,33 @@ def decode(buffer: bytes) -> Scene4D:
             dynamic_colors = frames_col
 
         elif kind == _KIND_TRACKS:
+            m = count
+            t = frame_count
+            cur = off
+            m_t = m * t
+            pos_q = np.frombuffer(buf, dtype="<u2", count=m_t * 3, offset=cur).reshape(m, t, 3)
+            cur += m_t * 3 * 2
+            n_vis_bytes = (m_t + 7) // 8
+            packed = np.frombuffer(buf, dtype=np.uint8, count=n_vis_bytes, offset=cur)
+            cur += n_vis_bytes
+            vis = np.unpackbits(packed, bitorder="little")[:m_t].astype(bool).reshape(m, t)
+            colors: np.ndarray | None = None
+            if has_track_color:
+                colors = np.frombuffer(buf, dtype=np.uint8, count=m * 3, offset=cur).reshape(m, 3).copy()
+            tracks = Tracks(
+                positions=_dequantize(pos_q.reshape(-1, 3), aabb_min, aabb_max).reshape(m, t, 3),
+                visibility=vis.copy(),
+                colors=colors,
+            )
+
+        elif kind == _KIND_CAMERAS:
+            t = count
+            cur = off
+            poses = np.frombuffer(buf, dtype="<f4", count=t * 7, offset=cur).reshape(t, 7).copy()
+            cur += t * 7 * 4
+            intr = np.frombuffer(buf, dtype="<f4", count=t * 4, offset=cur).reshape(t, 4).copy()
+            cameras = CameraTrack(poses=poses, intrinsics=intr)
+
+        else:
+            # Unknown kind — skip (forward compatibility, spec/05 §1).
+            continue

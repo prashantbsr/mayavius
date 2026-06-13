@@ -58,3 +58,33 @@ function makePointMaterial(
         ),
       },
       uPointSize: { value: DEFAULT_POINT_SIZE },
+      uViewportHeight: { value: 1 },
+      uOpacity: { value: opacity },
+    },
+  });
+}
+
+/** Construct the layer's THREE.Points (geometry + dequant material). Returns
+ * `null` when the scene lacks that section (nothing to render). The dynamic
+ * layer's geometry is pre-sized to the busiest frame (buildDynamic) so playback
+ * mutates a fixed buffer instead of allocating per frame. */
+function buildPoints(
+  layer: "static" | "dynamic",
+  scene: Mv4dScene,
+): THREE.Points | null {
+  if (layer === "static") {
+    const geometry = buildStatic(scene);
+    if (!geometry) return null;
+    const points = new THREE.Points(geometry, makePointMaterial(scene, 1.0));
+    // AABB-bounded already → never frustum-cull the static cloud (spec/07 §2.1).
+    points.frustumCulled = false;
+    return points;
+  }
+  const dynamic = buildDynamic(scene);
+  if (!dynamic) return null;
+  const points = new THREE.Points(dynamic.geometry, makePointMaterial(scene, 0.9));
+  points.frustumCulled = false;
+  return points;
+}
+
+export function PointCloud({

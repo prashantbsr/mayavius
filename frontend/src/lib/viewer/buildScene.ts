@@ -88,3 +88,26 @@ export function buildDynamic(scene: Mv4dScene): DynamicGeometry | null {
   const colorAttr = new THREE.BufferAttribute(colors, 3, /* normalized */ true);
   // Mark mutable so the renderer re-uploads the changed prefix each frame.
   positionAttr.setUsage(THREE.DynamicDrawUsage);
+  colorAttr.setUsage(THREE.DynamicDrawUsage);
+
+  g.setAttribute("position", positionAttr);
+  g.setAttribute("color", colorAttr);
+  // Same AABB-bounded extent as the static layer (one quantization range).
+  g.boundingBox = new THREE.Box3(
+    new THREE.Vector3(scene.aabbMin[0], scene.aabbMin[1], scene.aabbMin[2]),
+    new THREE.Vector3(scene.aabbMax[0], scene.aabbMax[1], scene.aabbMax[2]),
+  );
+  g.boundingSphere = g.boundingBox.getBoundingSphere(new THREE.Sphere());
+  // Start drawing nothing until the first frame is applied.
+  g.setDrawRange(0, 0);
+
+  return { geometry: g, maxCount, positionAttr, colorAttr };
+}
+
+/** `time→frame` mapping shared by every per-frame layer (spec/05 §2,
+ * spec/07 §3): `t = round(time*(T-1))`, clamped to `[0, T-1]`. */
+export function timeToFrame(time: number, frameCount: number): number {
+  if (frameCount <= 1) return 0;
+  const t = Math.round(time * (frameCount - 1));
+  return t < 0 ? 0 : t > frameCount - 1 ? frameCount - 1 : t;
+}

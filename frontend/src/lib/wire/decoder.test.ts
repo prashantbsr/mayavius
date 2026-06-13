@@ -268,3 +268,33 @@ describe("MV4D decoder — golden conformance (T-202)", () => {
           expect(f.colors[n * 3 + a]).toBe(c[a]);
         }
       });
+    });
+
+    // ---- tracks ----
+    const tr = scene.tracks!;
+    expect(tr.count).toBe(expected.tracks.count);
+    const T = expected.frameCount;
+    expected.tracks.positions.forEach((trackRows, m) => {
+      trackRows.forEach((p, t) => {
+        const base = (m * T + t) * 3;
+        for (let a = 0; a < 3; a++) {
+          const got = deq(tr.positionsQ[base + a], a);
+          expect(Math.abs(got - p[a])).toBeLessThanOrEqual(
+            expected.posTolerance[a] + 1e-9,
+          );
+        }
+      });
+    });
+    expected.tracks.visibility.forEach((row, m) => {
+      row.forEach((vis, t) => {
+        expect(tr.isVisible(m, t)).toBe(vis);
+      });
+    });
+    expected.tracks.colors.forEach((c, m) => {
+      for (let a = 0; a < 3; a++) {
+        expect(tr.colors![m * 3 + a]).toBe(c[a]);
+      }
+    });
+
+    // ---- cameras (exact f32) ----
+    const cam = scene.cameras!;

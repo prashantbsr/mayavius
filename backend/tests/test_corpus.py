@@ -28,3 +28,33 @@ import pytest
 
 from app.config import SAMPLES_DIR
 
+# The four corpus slugs (C-1..C-4, spec/10 §6). The slug IS the file name:
+# assets/samples/<slug>.{mp4,json,mv4d}. Explicit so a missing clip fails by NAME.
+CORPUS_SLUGS: list[str] = [
+    "walking-person",  # C-1 (the hero)
+    "street-vehicle",  # C-2
+    "pet-motion",      # C-3
+    "static-scene",    # C-4 (the negative control)
+]
+
+# Caps (spec/10 §6): clips are re-encoded to <= 3 s / <= 540p / <= ~2 MB each.
+# The byte cap is the curated-corpus ceiling; do NOT raise it to make a clip fit —
+# re-encode the clip instead (HARD RULE: never lower a cap / never weaken a test).
+MAX_DURATION_S: float = 3.0
+MAX_SIZE_BYTES: int = 2 * 1024 * 1024  # ~2 MB per clip (spec/10 §6)
+
+
+def _clip_path(slug: str) -> Path:
+    return SAMPLES_DIR / f"{slug}.mp4"
+
+
+def _sidecar_path(slug: str) -> Path:
+    return SAMPLES_DIR / f"{slug}.json"
+
+
+@pytest.mark.parametrize("slug", CORPUS_SLUGS)
+def test_corpus_present_and_licensed(slug: str) -> None:
+    """T-600 — each C-1..C-4 clip is present, licensed, short, and under the cap."""
+    clip = _clip_path(slug)
+    sidecar = _sidecar_path(slug)
+

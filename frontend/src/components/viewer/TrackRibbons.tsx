@@ -178,3 +178,17 @@ export function TrackRibbons({ scene }: { scene: Mv4dScene }) {
       const line = child as Line2;
       const meta = line.userData as RunMeta;
       // Segment i connects frame (startFrame+i) → (startFrame+i+1); it is drawn
+      // once t reaches its far endpoint. Visible segments = clamp(t-startFrame).
+      const visible = t - meta.startFrame;
+      line.geometry.instanceCount =
+        visible <= 0
+          ? 0
+          : visible >= meta.segmentCount
+            ? meta.segmentCount
+            : visible;
+    }
+  });
+
+  if (!group) return null;
+  return <primitive object={group} ref={groupRef} />;
+}

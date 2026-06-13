@@ -88,3 +88,33 @@ describe("MV4D decoder — golden fixture (T-150)", () => {
   });
 });
 
+describe("MV4D decoder — dynamic slicing (T-151)", () => {
+  it("slices each frame per frameDir incl. the empty frame", () => {
+    const buffer = readArrayBuffer(GOLDEN_PATH);
+    const scene = decodeReconstruction(buffer);
+
+    expect(scene.dynamic).toBeDefined();
+    const frames = scene.dynamic!.frames;
+    expect(frames.length).toBe(expected.frameCount);
+
+    expected.dynamic.frames.forEach((ef, t) => {
+      const f = frames[t];
+      expect(f.count).toBe(ef.count);
+      expect(f.positionsQ.length).toBe(ef.count * 3);
+      expect(f.colors.length).toBe(ef.count * 3);
+      // sub-views still point at the SAME backing buffer (zero-copy).
+      expect(f.positionsQ.buffer).toBe(buffer);
+      // exact colors (u8, no quantization).
+      ef.colors.forEach((c, k) => {
+        expect(f.colors[k * 3 + 0]).toBe(c[0]);
+        expect(f.colors[k * 3 + 1]).toBe(c[1]);
+        expect(f.colors[k * 3 + 2]).toBe(c[2]);
+      });
+    });
+
+    // The middle frame (t=1) is the empty frame.
+    expect(frames[1].count).toBe(0);
+    expect(frames[1].positionsQ.length).toBe(0);
+  });
+});
+

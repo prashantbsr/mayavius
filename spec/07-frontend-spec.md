@@ -306,3 +306,222 @@ contract.
 
 ---
 
+## 5. Playback + bullet-time
+
+The R3F loop (a `useFrame` inside `<Scene>` or a sibling `<PlaybackDriver/>`)
+owns time advancement:
+
+```ts
+useFrame((_, delta) => {
+  const s = useViewerStore.getState();
+  if (!s.isPlaying || s.frozen || !s.scene) return;
+  const T = s.frameCount, fps = s.scene.fps || DEFAULT_FPS_FALLBACK;
+  const dt = delta * fps / Math.max(T - 1, 1);     // normalized advance/sec
+  let next = s.time + dt;
+  if (next >= 1) next = s.loop ? next % 1 : (s.pause(), 1);
+  s.setTime(next);                                  // cheap single-field write
+});
+```
+Each frame the layers read `t = round(time*(T-1))` (§3) and the dynamic layer +
+ribbons update their `drawRange`/slice (§2).
+
+**Bullet-time (the signature interaction):** `BulletTimeButton` →
+`enterBulletTime()` → `isPlaying=false`, `frozen=true`, `cameraMode='bulletTime'`.
+The loop early-returns (time frozen at the current `t`), so the frozen frame’s
+points + full-history ribbons stay rendered while the user free-orbits.
+`OrbitControls` (drei, already `makeDefault` in `ViewerCanvas`) stay **enabled
+in every mode** — orbit is always allowed; bullet-time merely *stops time*. Exit
+restores `cameraMode='orbit'`.
+
+**Camera modes** (drive `OrbitControls` + camera, NOT the render path):
+
+| Mode | Behavior | Source |
+|------|----------|--------|
+| `orbit` (default) | user orbits; time plays/scrubs normally | — |
+| `asShot` | camera follows the reconstructed per-frame pose | `scene.cameras.poses.subarray(t*7, t*7+7)` → `(qx,qy,qz,qw,tx,ty,tz)`; `scene.cameras.intrinsics.subarray(t*4, t*4+4)` → `(fx,fy,cx,cy)` (normalized). **Vertical FOV** = `fovY_deg = 2·atan(0.5/fy)·180/π` (`fy` in image-height units); `fx`/`cx`/`cy` are **ignored in Path 1** (the camera is a viewpoint, no off-axis projection). Disables `OrbitControls` while active; unavailable when `HAS_CAMERAS` absent. |
+| `bulletTime` | time frozen, free orbit | as above |
+
+`asShot` is **optional** (renders only if `HAS_CAMERAS`); default is `orbit`.
+Switch to `asShot` to replay the original camera move; switch back to `orbit`
+the moment the user drags. **Initial camera fit (pinned math, so "the cloud fills
+the view on load" is reproducible):** `center = (aabbMin+aabbMax)/2`;
+`radius = 0.5·length(aabbMax−aabbMin)`; default `fovY = 50°`;
+`distance = radius / sin(0.5·fovYrad) · PADDING` (`PADDING = 1.3`); place the camera
+at `center + distance·(normalized default direction)` (default dir = `(0.3, 0.2, 1)`
+normalized → a slight 3/4 view down −Z), `lookAt(center)`. Tunable at W4.T3; these are
+the fixed defaults.
+
+---
+
+## 6. UX flows
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant L as app/page.tsx (Landing)
+  participant D as UploadDropzone
+  participant API as lib/api/client.ts
+  participant BE as FastAPI (spec/06)
+  participant V as /view/[id] (Viewer)
+  U->>L: open landing (static, indexed)
+  U->>D: drop clip (or pick an ExampleGallery clip)
+  D->>API: submitClip(file)  (loadState=submitting)
+  API->>BE: POST /jobs (multipart)  -> 202 {job id}
+  D->>V: router.push(/view/{jobId})
+  V->>API: streamJob(jobId) (SSE) | poll GET /jobs/{id}
+  loop until done
+    BE-->>API: progress 0..1 (loadState=processing)
+    API-->>V: setProgress() -> ProgressOverlay
+  end
+  V->>API: fetchResult(jobId) -> GET /jobs/{id}/result (ArrayBuffer)
+  API->>API: decodeReconstruction() (loadState=loading->ready)
+  API-->>V: setScene(Mv4dScene)
+  V->>U: progressive reveal -> interact -> copy /view/{id} link
+```
+
+Flow detail:
+1. **Upload.** `UploadDropzone` validates type (`video/*`) + size
+   (`MAX_UPLOAD_MB`), calls `submitClip` → `job id`, then
+   `router.push('/view/'+jobId)`. The `view/[id]` route doubles as job-status
+   and result page — the `id` is the **job id** ([06](06-backend-spec.md)).
+2. **Poll / stream.** Viewer subscribes via SSE — `streamJob(jobId)` opens an
+   `EventSource` on **`GET /jobs/{id}/stream`** (dedicated SSE route, built-in
+   `fastapi.sse` — [06 §7](06-backend-spec.md), C7). **Consumption contract (load-bearing):**
+   the backend tags each event with `event=<status>` (a **named** SSE event), so the
+   client MUST `addEventListener("queued"|"running"|"done"|"failed", …)` — the generic
+   `EventSource.onmessage` (unnamed `message`) will **never** fire. Each handler does
+   `JSON.parse(e.data)` into the poll-JSON shape (`{id,status,progress,stage,adapter_id,weights_license,result}`,
+   snake_case per `job_to_json`) → store; on `"done"` call `fetchResult`, on `"failed"`
+   set `loadState='error'`. Falls back to polling `GET /jobs/{id}` every
+   `POLL_INTERVAL_MS` when `USE_SSE=false`, on `EventSource.onerror`, **or** if no event
+   arrives within a watchdog timeout (guards a silently-stalled stream, not just an errored one). `ProgressOverlay`
+   shows status + 0..1 bar + the active **weights-license label** (`AdapterInfo.
+   weights_license`, e.g. "VGGT-1B · CC-BY-NC-4.0" — D2/[08 §7](08-dependencies-and-env.md)).
+3. **Progressive reveal.** On status `done` (the backend's terminal value,
+   [06 §6](06-backend-spec.md) — **not** `succeeded`), fetch the MV4D blob (HTTP
+   brotli/gzip, immutable cache — [05 §4](05-data-contract.md)), decode, then
+   reveal **STATIC_POINTS first** (the directory lets us locate it early — [05 §1](05-data-contract.md)),
+   then dynamic + ribbons. Cloud appears, not a spinner (handover §4.4).
+4. **Interact.** Orbit, scrub `Timeline`, play/pause/loop, bullet-time.
+5. **Share.** A "Copy link" button copies `${SITE_URL}/view/${id}`; that URL is
+   the virality surface (§8). Result pages are `noindex` (§8) but produce rich
+   share cards.
+6. **Examples (no live job).** An `ExampleGallery` clip opens `/view/<slug>`
+   directly — **no upload, no reconstruction**. Examples are **pre-seeded completed
+   jobs**: the backend lifespan registers each committed `assets/samples/<slug>.mv4d`
+   as a terminal `done` `Job` via `JobQueue.seed_example` ([06 §6](06-backend-spec.md)),
+   so an example `<slug>` lives in the **same id space** as a job id. The viewer
+   therefore uses the *identical* path — skip submit/processing, set
+   `loadState='loading'`, `fetchResult(slug)` → `GET /jobs/<slug>/result` → decode —
+   and `generateMetadata` works unchanged. In **W2 fixture mode** this is **one**
+   seeded example under the pinned slug **`example`** — `ExampleGallery` links to
+   `/view/example`, the backend seeds `assets/samples/example.mv4d` ([06 §6](06-backend-spec.md)).
+   The full C-1..C-4 corpus (slugs `walking-person`/`street-vehicle`/`pet-motion`/
+   `static-scene`) is seeded in **W4.T1**. This is the primary star-conversion path
+   (zero wait, zero GPU).
+   **Card content (default, since no test constrains it):** in **W2** the single
+   `example` card renders a slug-derived label ("Example scene") and a static
+   thumbnail = `/og.png` (no per-clip thumbnail pipeline until W4); from **W4** each
+   card shows its corpus role label (the C-1..C-4 names, [10 §6](10-testing-strategy.md))
+   and may use a representative-frame thumbnail.
+
+**On-mount loader (one unified path for examples AND live jobs).** `ViewerCanvas`
+runs a single loader effect (e.g. a `useLoadScene(resultId)` hook) for any
+`/view/[id]` — it always opens `streamJob(resultId)` (SSE, poll fallback, §6 step 2).
+Because a **seeded example is a terminal `done` job** ([06 §6](06-backend-spec.md)),
+`events()` emits the terminal state once and the loader immediately calls
+`fetchResult`; a live upload-job streams progress → `done` → `fetchResult`. **The
+client does NOT branch on `EXAMPLE_SLUGS`** (that list is server-only — §8, for
+`generateMetadata`/`sitemap`). `UploadDropzone` is the **only** producer of a new
+`submitClip`; `/view/[id]` never submits — it only loads an existing `id`.
+
+---
+
+## 7. Path-2 decoupling (the `Scene.tsx` seam)
+
+Path 2 (Spark `@sparkjsdev/spark` `<SplatMesh>`, 4DGS) is **OUT of MVP** (spec/03
+Part 1 §2; handover §4.2) — design for drop-in, do not build. Guarantees preserved:
+
+- **Controls never touch the renderer.** All HUD reads/writes only the Zustand
+  store (§1 rule). A Path-2 layer reads the same `time/frozen/cameraMode` and
+  needs zero control changes.
+- **The seam is `Scene.tsx`.** Keep its existing seam comment. Path 2 mounts a
+  sibling `<SplatScene/>` *alongside* (or instead of) the Path-1 layers, gated by
+  a `renderPath` flag — Path 1 stays the default and only MVP path.
+  ```tsx
+  // Scene.tsx — seam (illustrative; Path 2 OUT of MVP)
+  export function Scene() {
+    const scene = useViewerStore((s) => s.scene);
+    if (!scene) return null;
+    return (<>
+      <PointCloud layer="static"  scene={scene} />
+      <PointCloud layer="dynamic" scene={scene} />
+      <TrackRibbons scene={scene} />
+      {/* PATH 2 SEAM (spec/03 Part 1 §2; handover §4.2): a Spark <SplatMesh> layer
+          mounts HERE, reading the same store. Do NOT import @sparkjsdev/spark
+          in the MVP. */}
+    </>);
+  }
+  ```
+- **Decoder/store are render-agnostic.** `Mv4dScene` carries geometry, not
+  THREE objects; a splat path would consume the same views (or a future MV4D
+  section, additively per [05 §7](05-data-contract.md)) without changing the store.
+
+---
+
+## 8. SEO & share cards
+
+Server Components by default (D3 — the SEO requirement is *why* Next.js was
+chosen). The viewer is the only client-only island.
+
+| Surface | File | Spec |
+|---------|------|------|
+| Site metadata defaults | `app/layout.tsx` [EXISTS] | `metadataBase=SITE_URL`, title template `%s · mayavius`, OG/twitter defaults, `robots:{index,follow}` — keep |
+| Landing (indexable) | `app/page.tsx` [EXISTS] | stays a **Server Component**; only `UploadDropzone`/gallery cards are `'use client'` islands |
+| Result share card | `app/view/[id]/page.tsx` [EXISTS] | enrich `generateMetadata` (below) |
+| Sitemap | `app/sitemap.ts` [EXISTS] | landing + example results only; **never** user jobs |
+| Robots | `app/robots.ts` [EXISTS] | allow `/`; rely on per-result `noindex` for user results |
+
+**Result `generateMetadata` (the virality surface, [04](04-architecture.md) "star mechanics"):**
+- `params` is `Promise` — **`await` it** (Next 16). Keep `robots:{index:false,
+  follow:false}` for **user-generated** results (avoid indexing junk), but emit
+  full OG/twitter so pasted links render rich cards.
+- Replace the static `/og.png` with a **per-result dynamic OG image**: add
+  `app/view/[id]/opengraph-image.tsx` (+`twitter-image.tsx`) using `next/og`
+  `ImageResponse` (1200×630, <8MB OG / <5MB twitter — Next docs) showing a
+  representative frame thumbnail + clip title + mayavius mark. Until the
+  thumbnail pipeline exists ([11](11-deployment-and-launch.md)), fall back to the
+  static `/og.png`. **`frontend/public/og.png`** is a **1200×630** static branded card
+  (mayavius wordmark on a dark background; created in **W2.T5**); `layout.tsx`'s
+  site-wide OG default **and** the per-result static fallback both resolve to it, and
+  `opengraph-image.tsx` overrides it **only** for `/view/[id]`. (This is the one
+  referenced-but-otherwise-uncreated build asset.)
+- **Example/user classification (no backend round-trip):** `generateMetadata` and
+  `sitemap.ts` both import **`EXAMPLE_SLUGS`** from `config.ts` (§4.3); an id is an
+  example **iff** `id ∈ EXAMPLE_SLUGS`. This list MUST mirror the backend's pinned
+  slugs ([06 §6](06-backend-spec.md)): `['example']` in W2, + `walking-person`,
+  `street-vehicle`, `pet-motion`, `static-scene` in W4.
+- **Example results** (D10) are the exception: `robots:{index:true}` and listed
+  in `sitemap.ts` so they earn organic traffic and seed the share loop.
+
+---
+
+## 9. Definition of done (frontend MVP)
+
+- [ ] `decoder.ts` parses MV4D v1 → `Mv4dScene` (zero-copy), throws
+  `Mv4dDecodeError` on the [05 §8](05-data-contract.md) cases; round-trips the
+  backend encoder fixture (cross-format test, spec/10).
+- [ ] `api/client.ts` implements `submitClip`/`getJobStatus`/`streamJob`/
+  `fetchResult` against [06](06-backend-spec.md); SSE with polling fallback.
+- [ ] `<PointCloud>` static + dynamic render via the GPU-dequant ShaderMaterial;
+  positions stay `Uint16` end-to-end (no CPU `Float32` expansion).
+- [ ] `<TrackRibbons>` shows per-track `Line2` ribbons with visibility gaps,
+  growing with `t`.
+- [ ] Timeline/play/pause/loop/bullet-time work through the store; the loop
+  writes `time` transiently without HUD-wide re-renders.
+- [ ] Bullet-time freezes time and free-orbits the frozen frame.
+- [ ] Upload → poll/SSE → progressive reveal → copy `/view/[id]` link works
+  end-to-end against the local backend.
+- [ ] Landing stays a Server Component (indexable); result pages emit rich
+  share-card metadata; `npm run build`, `npm run lint`, `npx tsc --noEmit` pass.
+- [ ] No `@sparkjsdev/spark` import; `Scene.tsx` Path-2 seam comment intact.

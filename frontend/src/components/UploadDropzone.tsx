@@ -58,3 +58,33 @@ export function UploadDropzone() {
         return;
       }
       setLocalError(null);
+      setError(null);
+      setLoadState("submitting");
+      try {
+        const handle = await submitClip(file);
+        // The /view/[id] route doubles as job-status + result page; `id` is the
+        // job id (spec/07 §6 step 1). The on-mount loader there picks it up.
+        router.push(`/view/${handle.id}`);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Upload failed — try again.";
+        setLocalError(message);
+        setError(message);
+        setLoadState("error");
+      }
+    },
+    [router, setError, setLoadState, submitting],
+  );
+
+  const onInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) void handleFile(file);
+      // Reset so picking the same file twice re-fires `change`.
+      e.target.value = "";
+    },
+    [handleFile],
+  );
+
+  const onDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {

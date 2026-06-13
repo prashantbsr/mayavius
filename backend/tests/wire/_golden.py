@@ -1,0 +1,30 @@
+"""The single canonical golden ``Scene4D`` literal (W0.T4 / spec/10 §2).
+
+This is THE golden scene: a tiny (<4 KB encoded) reconstruction that exercises
+all four MV4D v1 sections (static + dynamic incl. an empty frame + tracks with
+mixed visibility + cameras). ``encode_reconstruction(golden_scene())`` is the
+committed `backend/tests/fixtures/golden_scene.mv4d` (T-200), and the SAME
+literal values are mirrored as ground truth in
+`frontend/src/lib/wire/__fixtures__/golden_expected.json` for the TS decoder
+(T-202). The byte layout it serializes to is owned by spec/05-data-contract.md
+§3 — this module only provides the in-memory literal, never redefines bytes.
+
+Do NOT change these values without regenerating the committed fixture AND the
+shared expectation JSON in the same commit (spec/05 §7 versioning rules).
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from app.core.domain.models import CameraTrack, Scene4D, Tracks
+
+
+def golden_scene() -> Scene4D:
+    """Return THE canonical golden ``Scene4D`` (spec/10 §2 — exact literal)."""
+    # static: N_s = 4 (positions f32, colors u8, conf u8 -> HAS_STATIC_CONF)
+    static_positions = np.array(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.5, 0.5, 0.5]],
+        dtype=np.float32,
+    )
+    static_colors = np.array(

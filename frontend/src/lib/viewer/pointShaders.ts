@@ -28,3 +28,13 @@ void main() {
 
 /** Fragment shader: circular sprite (`discard` outside the unit disc) + sRGB→
  * linear (`pow(vColor, 2.2)`) so colors aren't washed out; `uOpacity` alpha. */
+export const POINT_FRAG = /* glsl */ `
+varying vec3 vColor;
+uniform float uOpacity;
+void main() {
+  vec2 d = gl_PointCoord - 0.5;
+  if (dot(d, d) > 0.25) discard;                   // circular point
+  vec3 lin = pow(vColor, vec3(2.2));               // treat attribute as sRGB
+  gl_FragColor = vec4(lin, uOpacity);
+}
+`;

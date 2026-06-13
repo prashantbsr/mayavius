@@ -37,6 +37,18 @@ backend/models/
 backend/uploads/
 backend/outputs/
 
+# --- Sample videos: commit ONLY the curated corpus under assets/samples/ ---
+*.mp4
+*.mov
+*.webm
+!assets/samples/
+!assets/samples/*.mp4
+!assets/samples/*.mov
+!assets/samples/*.webm
+# the committed e2e upload fixture (W2.T5 / T-402) — un-ignore the dir before the file
+!frontend/e2e/fixtures/
+!frontend/e2e/fixtures/*.mp4
+
 # --- OS / editor ---
 .DS_Store
 *.log

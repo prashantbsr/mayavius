@@ -88,3 +88,33 @@ export function CameraRig({
   }, [scene, getR3f, controlsRef]);
 
   // ── 2. Per-frame camera-mode handling. ───────────────────────────────────────
+  useFrame(() => {
+    const s = useViewerStore.getState();
+    const controls = controlsRef.current;
+    const cameras = s.scene?.cameras;
+    // `asShot` is only valid when the scene carries per-frame poses (HAS_CAMERAS).
+    const asShot = s.cameraMode === "asShot" && !!cameras;
+
+    if (controls) {
+      // OrbitControls enabled in every mode EXCEPT asShot (spec/07 §5): orbit is
+      // always allowed; asShot hands the camera to the reconstructed pose.
+      controls.enabled = !asShot;
+    }
+
+    if (!asShot || !cameras || !s.scene) return;
+
+    // Follow the reconstructed per-frame pose (spec/07 §5 asShot row):
+    //   poses[t*7 .. t*7+7] = (qx,qy,qz,qw,tx,ty,tz)
+    //   intrinsics[t*4 .. t*4+4] = (fx,fy,cx,cy) normalized; only fy is used
+    //   (Path 1 treats the camera as a viewpoint — fx/cx/cy ignored).
+    const camera = getR3f().camera;
+    const t = timeToFrame(s.time, s.frameCount);
+    const p = cameras.poses;
+    const base = t * 7;
+    const q = tmpQuat.current.set(
+      p[base + 0],
+      p[base + 1],
+      p[base + 2],
+      p[base + 3],
+    );
+    camera.position.set(p[base + 4], p[base + 5], p[base + 6]);

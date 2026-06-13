@@ -178,3 +178,33 @@ def _voxel_dedup(
     keys_s = keys[order]
     first = np.ones(keys_s.shape[0], dtype=bool)
     first[1:] = np.any(keys_s[1:] != keys_s[:-1], axis=1)
+    sel = order[first]
+    return points[sel], colors[sel], conf[sel]
+
+
+def assemble_scene4d(
+    geo: GeometryResult,
+    tr: TrackResult,
+    request,
+    *,
+    motion_thresh: float = 0.95,
+) -> Scene4D:
+    """Static/dynamic split → RAW ``Scene4D`` (spec/06 §5 step 5). No caps/smoothing.
+
+    ``motion_thresh`` is the inter-frame-motion percentile (default 0.95). The
+    radius / voxel / motion-floor are fractions of the AABB diagonal (constants
+    above). Returns a RAW scene; the core service applies smoothing/culling/caps.
+    """
+    world_points = np.asarray(geo.world_points, dtype=np.float32)      # (S,H,W,3)
+    wp_conf = np.asarray(geo.world_points_conf, dtype=np.float32)      # (S,H,W)
+    S = world_points.shape[0]
+
+    tr_pos = np.asarray(tr.positions, dtype=np.float32)               # (M,T,3)
+    tr_vis = np.asarray(tr.visibility, dtype=bool)                     # (M,T)
+    tr_col = np.asarray(tr.colors, dtype=np.uint8).reshape(-1, 3)
+
+    fps = float(getattr(request, "target_fps", 12.0))
+
+    # ---- AABB over all VGGT points + lifted tracks → radius / voxel / motion floor.
+    #      ``amin`` anchors the static voxel-dedup grid (just a grid origin).
+    flat_wp = world_points.reshape(-1, 3)

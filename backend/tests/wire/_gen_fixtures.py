@@ -88,3 +88,33 @@ def _build_tiny_reverse_vector() -> bytes:
     # colors u8[2*3]: point0 (255,128,0), point1 (0,128,255).
     colors = struct.pack("<6B", 255, 128, 0, 0, 128, 255)
     dynamic_payload = frame_dir + positions + colors
+    assert len(dynamic_payload) == 16 + 12 + 6 == 34
+
+    # ---- section directory — 1 entry, 16 bytes @48 (spec/05 §3.3) ----
+    # First payload begins at the 8-aligned offset right after the directory:
+    # dir starts @48, one 16B entry -> ends @64 (already 8-aligned) -> payload @64.
+    byte_offset = 64
+    buf += struct.pack(
+        "<IIII", _KIND_DYNAMIC, byte_offset, len(dynamic_payload), 2  # count = T
+    )
+    assert len(buf) == 64
+
+    # ---- DYNAMIC payload @64 ----
+    buf += dynamic_payload
+    assert len(buf) == 98, len(buf)
+    return bytes(buf)
+
+
+def main() -> None:
+    _BACKEND_FIXTURES.mkdir(parents=True, exist_ok=True)
+    _FRONTEND_FIXTURES.mkdir(parents=True, exist_ok=True)
+
+    golden = encode_reconstruction(golden_scene())
+    assert len(golden) < 4096, f"golden fixture must be <4KB, got {len(golden)}"
+    (_BACKEND_FIXTURES / "golden_scene.mv4d").write_bytes(golden)
+    print(f"wrote golden_scene.mv4d: {len(golden)} bytes")
+
+    tiny = _build_tiny_reverse_vector()
+    assert len(tiny) == 98, len(tiny)
+    (_BACKEND_FIXTURES / "tiny.mv4d").write_bytes(tiny)
+    (_FRONTEND_FIXTURES / "tiny.mv4d").write_bytes(tiny)

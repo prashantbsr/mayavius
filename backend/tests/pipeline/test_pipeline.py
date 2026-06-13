@@ -298,3 +298,33 @@ def test_assemble_splits_moving_into_dynamic_rest_into_static() -> None:
         # Dynamic points are near the moving center, not on the z=0 plane.
         d_to_center = np.linalg.norm(dyn - centers[t][None, :], axis=1)
         assert np.all(d_to_center < 1.0), (t, d_to_center.max())
+        assert np.all(dyn[:, 2] > 1.0)  # well above the z=0 plane
+        # Their colors are red (the blob color), aligned to positions.
+        col = scene.dynamic_colors[t]
+        assert col.shape[0] == dyn.shape[0]
+        assert np.all(col[:, 0] >= 200) and np.all(col[:, 1] <= 50)
+
+    # Static points exist, all on (or near) the z=0 plane, NONE in the moving region.
+    assert scene.static_positions.shape[0] > 0
+    assert np.all(np.abs(scene.static_positions[:, 2]) < 1.0)
+    for t in range(S):
+        d = np.linalg.norm(scene.static_positions - centers[t][None, :], axis=1)
+        assert np.all(d > 1.0), f"a static point is in the moving cluster at frame {t}"
+
+    # static_conf present (u8) and aligned.
+    assert scene.static_conf is not None
+    assert scene.static_conf.dtype == np.uint8
+    assert scene.static_conf.shape[0] == scene.static_positions.shape[0]
+
+    # tracks + cameras populated.
+    assert scene.tracks is not None
+    assert scene.tracks.positions.shape == (2, S, 3)
+    assert scene.cameras is not None
+    assert scene.cameras.poses.shape == (S, 7)
+
+    # AABB spans ALL positions (static ∪ dynamic ∪ tracks).
+    all_pts = [scene.static_positions]
+    all_pts += [p for p in scene.dynamic_positions if p.size]
+    all_pts.append(scene.tracks.positions.reshape(-1, 3))
+    allp = np.concatenate(all_pts, axis=0)
+    assert np.all(scene.aabb_min <= allp.min(axis=0) + 1e-5)

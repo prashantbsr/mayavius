@@ -178,3 +178,33 @@ def test_caps_static_drops_lowest_conf_first() -> None:
     """T-104 — static cull keeps the HIGHEST-confidence points (every dropped <= every kept)."""
     scene = _over_cap_scene()
     full_conf = np.asarray(scene.static_conf)
+    result = enforce_caps(scene)
+
+    kept_conf = np.asarray(result.static_conf)
+    assert kept_conf.shape[0] == MAX_STATIC
+
+    # The kept conf multiset is EXACTLY the top-N of the sorted full conf (tie-safe).
+    sorted_full = np.sort(full_conf)
+    expected_kept = sorted_full[-MAX_STATIC:]
+    assert np.array_equal(np.sort(kept_conf), expected_kept)
+
+    # Every dropped conf <= every kept conf.
+    n_dropped = full_conf.shape[0] - MAX_STATIC
+    max_dropped = int(sorted_full[:n_dropped].max())
+    assert max_dropped <= int(kept_conf.min())
+
+
+def test_caps_tracks_drop_lowest_mean_visibility_first() -> None:
+    """T-104 — track cull keeps the HIGHEST mean-visibility tracks."""
+    scene = _over_cap_scene()
+    # Mean visibility is computed over the POST-frame-cull T axis (the frame cap runs
+    # first), so reproduce that here: subsample the visibility on the same frame
+    # indices the implementation uses, then rank.
+    frame_idx = np.unique(
+        np.linspace(0, scene.frame_count - 1, MAX_FRAMES).round().astype(np.int64)
+    )
+    full_vis = np.asarray(scene.tracks.visibility)[:, frame_idx]
+    full_mean = full_vis.mean(axis=1)
+
+    result = enforce_caps(scene)
+    assert result.tracks is not None

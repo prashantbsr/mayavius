@@ -148,3 +148,33 @@ def _moving_track_samples(
         return np.empty((0, 3), dtype=np.float32)
     # Threshold = max(percentile of net excursions, net floor). >= so that on small
     # track sets (percentile can equal the max excursion) the genuinely moving tracks
+    # are still selected; the net floor keeps zero-mean camera jitter out.
+    pct = float(np.percentile(excursion[has], motion_thresh_pct * 100.0))
+    thresh = max(pct, float(net_floor))
+
+    moving_track = excursion >= thresh                    # (M,)
+    moving_node = vis & moving_track[:, None]             # (M,T)
+    if not moving_node.any():
+        return np.empty((0, 3), dtype=np.float32)
+    return pos[moving_node].reshape(-1, 3).astype(np.float32)
+
+
+def _voxel_dedup(
+    points: np.ndarray, colors: np.ndarray, conf: np.ndarray, voxel: float, origin: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Voxel-grid downsample keeping the HIGHEST-conf point+color per voxel (no averaging).
+
+    ``voxel`` is the edge length; ``origin`` anchors the grid. Returns
+    ``(points_kept, colors_kept, conf_kept)`` (conf left in its input dtype).
+    """
+    n = points.shape[0]
+    if n == 0:
+        return points, colors, conf
+    if voxel <= 0:
+        return points, colors, conf
+    keys = np.floor((points.astype(np.float32) - origin[None, :]) / np.float32(voxel)).astype(np.int64)
+    # Sort by voxel key then DESCENDING conf so the first row per key is the max-conf.
+    order = np.lexsort((-conf.astype(np.float64), keys[:, 2], keys[:, 1], keys[:, 0]))
+    keys_s = keys[order]
+    first = np.ones(keys_s.shape[0], dtype=bool)
+    first[1:] = np.any(keys_s[1:] != keys_s[:-1], axis=1)

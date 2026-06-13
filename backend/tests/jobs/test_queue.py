@@ -268,3 +268,33 @@ def test_job_to_json_base_keys_always_present(tmp_path):
     assert payload["status"] == "queued"
     assert payload["progress"] == 0.0
     assert payload["stage"] == "queued"
+
+
+def test_progress_closure_pushes_running_events(tmp_path):
+    """The progress closure (called from the executor thread) surfaces running frames.
+
+    Uses a custom adapter that calls progress() with distinct stages, then asserts
+    those stages appear on the SSE stream — proving the cross-thread
+    call_soon_threadsafe marshalling works.
+    """
+
+    class _ProgressAdapter(ReconstructionPort):
+        name = "prog"
+
+        @property
+        def info(self) -> AdapterInfo:
+            return AdapterInfo(
+                name="prog",
+                produces_tracks=True,
+                dynamic=True,
+                mps_capable=True,
+                weights_license="cc-by-nc-4.0",
+                default_weights="(none)",
+            )
+
+        def reconstruct(self, request, progress=None) -> Scene4D:
+            if progress is not None:
+                progress(0.30, "alpha")
+                progress(0.60, "beta")
+            return Scene4D(
+                frame_count=1,

@@ -28,3 +28,17 @@ export function PlaybackControls() {
       >
         {isPlaying ? "Pause" : "Play"}
       </button>
+      <button
+        type="button"
+        aria-label="Loop"
+        aria-pressed={loop}
+        onClick={() => toggleLoop()}
+        className={`rounded px-3 py-1 text-xs font-medium text-white hover:bg-white/20 ${
+          loop ? "bg-white/25" : "bg-white/10"
+        }`}
+      >
+        Loop
+      </button>
+    </div>
+  );
+}

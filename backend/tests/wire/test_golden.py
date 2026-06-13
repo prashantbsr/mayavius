@@ -88,3 +88,23 @@ def test_reverse_conformance_tiny_vector():
     assert scene.frame_count == 2
     assert [f.shape[0] for f in scene.dynamic_positions] == [1, 1]
 
+    # positions within quantization tolerance of (0.25,...) and (0.5,...).
+    aabb_min = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+    aabb_max = np.array([1.0, 1.0, 1.0], dtype=np.float32)
+    tol = (aabb_max - aabb_min) / 65535.0 + 1e-6
+
+    p0 = scene.dynamic_positions[0]
+    p1 = scene.dynamic_positions[1]
+    assert p0.shape == (1, 3)
+    assert p1.shape == (1, 3)
+    np.testing.assert_array_less(np.abs(p0[0] - np.float32(0.25)), tol)
+    np.testing.assert_array_less(np.abs(p1[0] - np.float32(0.5)), tol)
+
+    # colors exact: point0 (255,128,0), point1 (0,128,255).
+    np.testing.assert_array_equal(scene.dynamic_colors[0], np.array([[255, 128, 0]], np.uint8))
+    np.testing.assert_array_equal(scene.dynamic_colors[1], np.array([[0, 128, 255]], np.uint8))
+
+    # no static / tracks / cameras in this minimal scene.
+    assert scene.static_positions.shape[0] == 0
+    assert scene.tracks is None
+    assert scene.cameras is None

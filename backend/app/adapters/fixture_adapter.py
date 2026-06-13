@@ -28,3 +28,33 @@ from app.core.ports.reconstruction_port import (
     AdapterInfo,
     ProgressSink,
     ReconstructionPort,
+)
+
+# A small default frame count; the honored T is min(request.max_frames, this) so a
+# decoded result always reports frameCount <= 64 (T-306). Small + deterministic.
+_DEFAULT_FRAMES = 6
+
+# Per-step dwell (seconds) between the two progress emissions. The fixture work is
+# near-instant; without a dwell a live UPLOAD job reaches `done` BEFORE a navigating
+# browser opens its EventSource (measured subscribe latency ≈ 1s: hydrate +
+# dynamic-import the R3F viewer bundle, then the useLoadScene effect opens the
+# stream). Per the spec/06 §6 late-subscriber contract (already-terminal → emit the
+# terminal event once + return), a job that finished first never replays its
+# intermediate 0.25/0.75 progression, so the client's viewerStore.progress would
+# only ever hold {0, 1} and e2e T-402 ("observed ≥1 value 0<p<1 over the run") is
+# unsatisfiable.
+#
+# This dwell keeps a live job in `running` long enough (~2·delay) that a real client
+# subscribes mid-run and the (now monotonic — see JobQueue.events) late-subscriber
+# path delivers the running progression before `done`. It changes NO status
+# semantics and NO terminal contract — it only SPACES the two progress emissions
+# this adapter already promises, and runs inside the worker's thread-pool executor
+# (spec/06 §6) so it never blocks the event loop or SSE delivery. ONLY the fake
+# adapter path — the real model adapters are untouched. Default 0.6s → ~1.2s running
+# window (> the ~1s subscribe latency, with margin); far inside every timeout
+# (T-303 polls 10s, T-308 drains the stream, e2e polls 30s). It is paid only by an
+# actual upload job (seeded examples are pre-baked and never call reconstruct), and
+# the unit-test JobQueue path uses the test-only FakeAdapter (no dwell). Env-tunable
+# via MAYAVIUS_FIXTURE_STEP_DELAY_S (set 0 to disable).
+_STEP_DELAY_S = float(os.environ.get("MAYAVIUS_FIXTURE_STEP_DELAY_S", "0.6"))
+

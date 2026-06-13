@@ -19,13 +19,19 @@ dev-frontend: ## Run Next.js dev server (http://localhost:3000)
 dev-backend: ## Run FastAPI dev server (http://localhost:8000)
 	cd backend && ./.venv/bin/uvicorn app.main:app --reload --port 8000
 
-test: test-backend test-frontend ## Run all tests/checks
+test: test-backend test-frontend ## Run the CI test set (excludes e2e + mps)
 
-test-backend: ## Run backend smoke/unit tests
-	cd backend && ./.venv/bin/python -m pytest
+test-backend: ## Run backend unit + integration (no torch/MPS)
+	cd backend && ./.venv/bin/python -m pytest -m "not mps and not gpu"
 
-test-frontend: ## Typecheck frontend (no test runner wired yet)
-	cd frontend && npx tsc --noEmit
+test-frontend: ## Run frontend unit tests + typecheck
+	cd frontend && npm run test && npx tsc --noEmit
+
+test-e2e: ## Run Playwright e2e (fixture-mode backend; no GPU)
+	cd frontend && npm run test:e2e
+
+test-mps: ## On-device MPS smoke on the 36 GB Mac (opt-in; needs requirements-ml.txt)
+	cd backend && MAYAVIUS_RUN_MPS_SMOKE=1 ./.venv/bin/python -m pytest -m mps -s
 
 lint: ## Lint frontend
 	cd frontend && npm run lint

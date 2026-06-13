@@ -28,3 +28,12 @@ export function Timeline() {
         type="range"
         aria-label="Timeline"
         min={0}
+        max={1}
+        step={1 / STEPS}
+        value={time}
+        onChange={(e) => setTime(Number(e.target.value))}
+        className="h-1 flex-1 cursor-pointer accent-white"
+      />
+    </label>
+  );
+}

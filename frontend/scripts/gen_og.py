@@ -118,3 +118,27 @@ def main() -> None:
 
     # Accent rule under the wordmark.
     rule_w = 360
+    rect(px, (W - rule_w) // 2, wm_y + 7 * wm_scale + 34, rule_w, 6, ACCENT)
+
+    # Tagline, centered, two lines (kept within ~80px side margins at scale 6).
+    line1 = "DROP IN A VIDEO - ORBIT A LIVE"
+    line2 = "4D RECONSTRUCTION IN YOUR BROWSER"
+    tl_scale = 5
+    ty = wm_y + 7 * wm_scale + 84
+    text(px, line1, (W - text_width(line1, tl_scale)) // 2, ty, tl_scale, SUB)
+    text(
+        px,
+        line2,
+        (W - text_width(line2, tl_scale)) // 2,
+        ty + 7 * tl_scale + 18,
+        tl_scale,
+        SUB,
+    )
+
+    out = Path(__file__).resolve().parents[1] / "public" / "og.png"
+    out.write_bytes(png_bytes(px))
+    print(f"wrote {out} ({out.stat().st_size} bytes, {W}x{H})")
+
+
+if __name__ == "__main__":
+    main()

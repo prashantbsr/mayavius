@@ -88,3 +88,33 @@ describe("viewerStore actions (T-170)", () => {
     useViewerStore.getState().setFrozen(true);
     expect(useViewerStore.getState().frozen).toBe(true);
     useViewerStore.getState().setFrozen(false);
+    expect(useViewerStore.getState().frozen).toBe(false);
+  });
+
+  it("enterBulletTime sets frozen + cameraMode=bulletTime + isPlaying=false", () => {
+    // Start playing to prove enterBulletTime pauses.
+    useViewerStore.getState().play();
+    useViewerStore.getState().enterBulletTime();
+    const s = useViewerStore.getState();
+    expect(s.frozen).toBe(true);
+    expect(s.cameraMode).toBe("bulletTime");
+    expect(s.isPlaying).toBe(false);
+  });
+
+  it("exitBulletTime unfreezes + restores cameraMode=orbit", () => {
+    useViewerStore.getState().enterBulletTime();
+    useViewerStore.getState().exitBulletTime();
+    const s = useViewerStore.getState();
+    expect(s.frozen).toBe(false);
+    expect(s.cameraMode).toBe("orbit");
+  });
+
+  it("setScene sets scene + frameCount + loadState=ready", () => {
+    const scene = makeScene(17);
+    useViewerStore.getState().setScene(scene);
+    const s = useViewerStore.getState();
+    expect(s.scene).toBe(scene);
+    expect(s.frameCount).toBe(17);
+    expect(s.loadState).toBe("ready");
+  });
+

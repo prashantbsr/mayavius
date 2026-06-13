@@ -88,3 +88,33 @@ class FixtureAdapter(ReconstructionPort):
         # (spec/06 §6) — it never blocks the event loop or SSE delivery.
         if progress is not None:
             progress(0.25, "decode")
+            if _STEP_DELAY_S > 0:
+                time.sleep(_STEP_DELAY_S)
+
+        # Honor the frame cap: a real model never exceeds request.max_frames.
+        t = max(1, min(int(request.max_frames), _DEFAULT_FRAMES))
+
+        scene = _build_scene(t, fps=float(request.target_fps))
+
+        if progress is not None:
+            if _STEP_DELAY_S > 0:
+                time.sleep(_STEP_DELAY_S)
+            progress(0.75, "assemble")
+        return scene
+
+
+def _build_scene(t: int, *, fps: float) -> Scene4D:
+    """Hand-author a deterministic ``Scene4D`` with all four sections over ``t`` frames.
+
+    All points live in mayavius world space (+X right, +Y up, -Z forward); the AABB
+    spans every static, dynamic, and track position so quantization never clamps
+    (spec/05 §2 / T-103). Includes >=1 empty dynamic frame and >=2 tracks with mixed
+    visibility (spec/10 §2).
+    """
+    # --- static background: a small grid in front of the camera (z < 0). ---
+    static_positions = np.array(
+        [
+            [-1.0, -1.0, -2.0],
+            [1.0, -1.0, -2.0],
+            [-1.0, 1.0, -2.0],
+            [1.0, 1.0, -2.0],

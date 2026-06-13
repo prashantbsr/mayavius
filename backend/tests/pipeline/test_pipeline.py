@@ -418,3 +418,33 @@ def test_assemble_fallback_to_sparse_when_vggt_empty() -> None:
     # Sparse dynamic: at least one frame has the moving track point.
     total_dyn = sum(p.shape[0] for p in scene.dynamic_positions)
     assert total_dyn >= 1
+    # Static is empty (no usable VGGT points).
+    assert scene.static_positions.shape[0] == 0
+    assert scene.tracks is not None
+
+
+# ---------------------------------------------------------------------------
+# (d) decode_and_subsample — cv2-gated; skips cleanly without opencv
+# ---------------------------------------------------------------------------
+
+def test_decode_and_subsample_shape_and_cap() -> None:
+    """decode_and_subsample -> [S,3,~518,W] uint8 RGB, S <= max_frames (cv2-gated)."""
+    pytest.importorskip("cv2")
+    from tests.pipeline._gen_tiny_mp4 import ensure_tiny_mp4
+    from app.pipeline.decode import decode_and_subsample
+
+    fixture = Path(__file__).resolve().parent.parent / "fixtures" / "tiny_real.mp4"
+    path = ensure_tiny_mp4(fixture)
+    if path is None:
+        pytest.skip("cv2 cannot write/read mp4 in this environment")
+
+    max_frames = 6
+    request = ReconstructionRequest(
+        video_path=str(path), max_frames=max_frames, target_fps=12.0
+    )
+    frames = decode_and_subsample(request)
+
+    assert frames.dtype == np.uint8
+    assert frames.ndim == 4
+    S, C, Hh, Ww = frames.shape
+    assert C == 3

@@ -58,3 +58,33 @@ _DEFAULT_FRAMES = 6
 # via MAYAVIUS_FIXTURE_STEP_DELAY_S (set 0 to disable).
 _STEP_DELAY_S = float(os.environ.get("MAYAVIUS_FIXTURE_STEP_DELAY_S", "0.6"))
 
+
+class FixtureAdapter(ReconstructionPort):
+    """Deterministic, torch-free fixture reconstructor (registry id ``fake``)."""
+
+    name = "fake"
+
+    def __init__(self, settings=None) -> None:
+        # The registry factory passes ``settings``; the fixture ignores it (no ML).
+        self._settings = settings
+
+    @property
+    def info(self) -> AdapterInfo:
+        return AdapterInfo(
+            name="fake",
+            produces_tracks=True,
+            dynamic=True,
+            mps_capable=True,
+            weights_license="none",
+            default_weights="(fixture)",
+        )
+
+    def reconstruct(
+        self, request, progress: ProgressSink | None = None
+    ) -> Scene4D:
+        # Emit a non-terminal running progression BEFORE returning (T-303), spaced
+        # by a small dwell so a navigating browser subscribes mid-run and observes
+        # 0<p<1 (e2e T-402). The dwell runs in the worker's executor thread
+        # (spec/06 §6) — it never blocks the event loop or SSE delivery.
+        if progress is not None:
+            progress(0.25, "decode")

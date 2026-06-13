@@ -358,3 +358,33 @@ def _static_only_scene(with_conf: bool) -> Scene4D:
         frame_count=1,
         fps=12.0,
         aabb_min=np.zeros(3, np.float32),
+        aabb_max=np.ones(3, np.float32),
+        static_positions=rng.random((N, 3), dtype=np.float32).astype(np.float32),
+        static_colors=rng.integers(0, 256, (N, 3), dtype=np.uint8),
+        static_conf=rng.integers(0, 256, (N,), dtype=np.uint8) if with_conf else None,
+        dynamic_positions=[],
+        dynamic_colors=[],
+        tracks=None,
+        cameras=None,
+    )
+
+
+def test_t105_static_only_emits_only_static():
+    scene = _static_only_scene(with_conf=False)
+    buf = encode_reconstruction(scene)
+    h = _parse_header(buf)
+
+    assert h["section_count"] == 1
+    assert h["flags"] == _FLAG_HAS_STATIC  # no dynamic/tracks/cameras/conf/track-color
+    entries = _parse_directory(buf, h["section_count"])
+    assert [e["kind"] for e in entries] == [_KIND_STATIC]
+
+    out = decode(buf)
+    assert out.static_positions.shape[0] == 12
+    assert out.static_conf is None
+    assert out.tracks is None
+    assert out.cameras is None
+    # absent dynamic section => empty frames
+    assert all(f.shape[0] == 0 for f in out.dynamic_positions)
+
+

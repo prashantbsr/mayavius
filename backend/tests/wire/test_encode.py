@@ -58,3 +58,33 @@ def _parse_header(buf: bytes):
         "magic": magic,
         "version": version,
         "flags": flags,
+        "pos_bits": pos_bits,
+        "section_count": section_count,
+        "frame_count": frame_count,
+        "reserved0": reserved0,
+        "fps": fps,
+        "reserved1": reserved1,
+        "reserved2": reserved2,
+    }
+
+
+def _parse_directory(buf: bytes, section_count: int):
+    entries = []
+    for i in range(section_count):
+        kind, off, length, count = struct.unpack_from(
+            "<IIII", buf, _DIR_OFFSET + i * _DIR_ENTRY_BYTES
+        )
+        entries.append({"kind": kind, "off": off, "length": length, "count": count})
+    return entries
+
+
+def _build_representative_scene(seed: int = 7) -> Scene4D:
+    """static + dynamic (incl an empty frame) + tracks + cameras, T=4."""
+    rng = np.random.default_rng(seed)
+    T = 4
+    aabb_min = np.array([-1.0, -2.0, 0.0], dtype=np.float32)
+    aabb_max = np.array([3.0, 2.0, 5.0], dtype=np.float32)
+
+    def rand_pts(n):
+        return (rng.random((n, 3), dtype=np.float32) * (aabb_max - aabb_min) + aabb_min).astype(
+            np.float32

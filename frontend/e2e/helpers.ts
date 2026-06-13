@@ -58,3 +58,33 @@ export async function storeField<T = unknown>(
 /**
  * Open `/view/<id>` and wait until the scene is rendered: the WebGL `<canvas>`
  * is present AND `__mayaviusDebug.staticPointCount > 0` (the T-401 reveal gate).
+ * Used by every viewer-flow test so they start from a deterministic "scene
+ * loaded" state. Polls — no wall-clock sleep.
+ */
+export async function openLoadedViewer(page: Page, id: string): Promise<void> {
+  await page.goto(`/view/${id}`);
+  await page.waitForSelector("canvas", { timeout: 30_000 });
+  await expect
+    .poll(() => debugNumber(page, "staticPointCount", -1), {
+      timeout: 30_000,
+      intervals: [100, 200, 300],
+    })
+    .toBeGreaterThan(0);
+}
+
+/**
+ * Return the always-on progress history (`window.__mayaviusProgressLog`) — the
+ * ordered, de-duplicated set of every `progress` value the store has held since
+ * the viewer mounted (src/lib/state/testObservability.ts). The recorder is
+ * installed BEFORE the loader effect, so the buffered SSE progression
+ * (0.25 → 0.75 → 1) is captured deterministically — T-402 reads this rather than
+ * catching a mid-flight DOM frame (mirror of T-303's observed-set framing).
+ */
+export async function progressSeen(page: Page): Promise<number[]> {
+  return page.evaluate(() => window.__mayaviusProgressLog ?? []);
+}
+
+/**
+ * Drag a range `<input>` thumb across [0,1] by dispatching the native `input`
+ * sequence the React handler listens to. Real pointer drags on a styled range
+ * input are flaky across engines; the scrubber's contract (spec/07 §4.2) is "an

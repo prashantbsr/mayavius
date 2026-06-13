@@ -148,3 +148,33 @@ def test_sse_progress_stream(client) -> None:
         assert b >= a, progresses
     # Last event is terminal done (tolerate a fast job emitting only the terminal).
     assert events[-1]["status"] == "done"
+    assert events[-1]["progress"] == 1.0
+
+
+# --- T-310 — adapter-contract suite (parametrized) -----------------------------
+# FixtureAdapter always; real model adapters are added under @pytest.mark.mps when
+# their reconstruct() lands (W3) — skipped now.
+def _fixture_adapter():
+    from app.adapters.fixture_adapter import FixtureAdapter
+
+    return FixtureAdapter(settings)
+
+
+@pytest.mark.parametrize("adapter_factory", [_fixture_adapter], ids=["fixture"])
+def test_adapter_contract(adapter_factory) -> None:
+    from app.core.domain.models import Scene4D
+
+    adapter = adapter_factory()
+    info = adapter.info
+    assert info.weights_license, "weights_license must be populated (D2)"
+
+    req = ReconstructionRequest(video_path="(ignored)", max_frames=8, target_fps=12.0)
+    scene = adapter.reconstruct(req)
+    assert isinstance(scene, Scene4D)
+
+    # Honors caps (shapes within spec/05 §4).
+    assert 1 <= scene.frame_count <= 64
+    assert scene.static_positions.shape[1] == 3
+    assert scene.static_positions.shape[0] <= 150_000
+    assert len(scene.dynamic_positions) == scene.frame_count
+    for frame in scene.dynamic_positions:

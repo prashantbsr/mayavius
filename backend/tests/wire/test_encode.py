@@ -448,3 +448,33 @@ def test_t106_empty_dynamic_frame():
     T = 3
     rng = np.random.default_rng(6)
     counts = [4, 0, 2]  # middle frame empty (pointCount==0)
+    dyn_pos = [rng.random((c, 3), dtype=np.float32).astype(np.float32) for c in counts]
+    dyn_col = [rng.integers(0, 256, (c, 3), dtype=np.uint8) for c in counts]
+    scene = Scene4D(
+        frame_count=T,
+        fps=15.0,
+        aabb_min=np.zeros(3, np.float32),
+        aabb_max=np.ones(3, np.float32),
+        static_positions=np.empty((0, 3), np.float32),
+        static_colors=np.empty((0, 3), np.uint8),
+        static_conf=None,
+        dynamic_positions=dyn_pos,
+        dynamic_colors=dyn_col,
+        tracks=None,
+        cameras=None,
+    )
+    out = decode(encode_reconstruction(scene))
+
+    assert [f.shape[0] for f in out.dynamic_positions] == counts
+    assert out.dynamic_positions[1].shape == (0, 3)
+    assert out.dynamic_colors[1].shape == (0, 3)
+    for t in range(T):
+        np.testing.assert_array_equal(out.dynamic_colors[t], dyn_col[t])
+        if counts[t]:
+            span = (out.aabb_max - out.aabb_min) / 65535.0
+            err = np.abs(out.dynamic_positions[t] - dyn_pos[t]).max(axis=0)
+            np.testing.assert_array_less(err, span + 1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# T-107 — version constant

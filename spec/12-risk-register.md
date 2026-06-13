@@ -33,3 +33,39 @@ Likelihood / Impact scale: **L** low · **M** med · **H** high.
 
 ---
 
+## 2. Likelihood × Impact summary
+
+Cells list risk IDs. The high-likelihood / high-impact corner is where the
+scope-and-polish budget goes.
+
+| | **Impact: Low** | **Impact: Med** | **Impact: High** |
+|---|---|---|---|
+| **Likelihood: High** | — | R5 | **R1, R2** |
+| **Likelihood: Med** | — | R6, R7, R8, R9, R10 | R3, R4 |
+| **Likelihood: Low** | — | — | — |
+
+**Reading of the matrix:**
+
+- **Top-right (H/H) — R1, R2:** the existential risks. R1 is *contained by
+  policy* (the frame cap is a locked constraint, not a tuning knob); R2 is
+  *contained by craft* (confidence/visibility culling + honest UI). Spend here
+  first.
+- **R5 (H-certain / M):** licensing is a **known, accepted** constraint, not an
+  open question — mitigated by labeling (D2), so impact is capped at "commercial
+  users get static-only." It is high-likelihood only because it is already true.
+- **Mid band (R3, R4):** quality risks that decide whether the demo looks
+  *magical* vs *broken*. The MV4D static-first format structurally de-risks R3.
+- **R6–R10:** operational / engineering risks, each with a concrete kill-switch
+  that **degrades to the cloud-GPU optional path or a smaller payload** without
+  touching the core or blocking the local MVP.
+
+**Cross-cutting fallback ladder** (apply in order, cheapest first):
+1. **Clamp / subsample** (R1, R10) — stay under caps.
+2. **Cull by confidence/visibility** (R2, R10) — drop noise.
+3. **Degrade to static-only** (R2, R3, R5) — a stable cloud always beats a broken
+   animation, and is the commercial-license fallback too.
+4. **Move the failing adapter to the optional cloud GPU** (R6, R9) — last resort;
+   the default VGGT+CoTracker3 combo must still run on the 36 GB Mac.
+
+No fallback rearchitects the hexagonal core or the MV4D contract — every
+kill-switch is a configuration, a cull, or a flag-clear within the existing seams.

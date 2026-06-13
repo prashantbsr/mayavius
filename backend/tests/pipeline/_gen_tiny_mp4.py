@@ -58,3 +58,14 @@ def _is_decodable(path: Path) -> bool:
     try:
         import cv2
     except Exception:
+        return False
+    cap = cv2.VideoCapture(str(path))
+    ok = cap.isOpened()
+    n = 0
+    if ok:
+        r, _ = cap.read()
+        while r:
+            n += 1
+            r, _ = cap.read()
+    cap.release()
+    return ok and n > 0

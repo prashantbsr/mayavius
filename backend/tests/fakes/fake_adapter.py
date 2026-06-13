@@ -58,3 +58,33 @@ class FakeAdapter(ReconstructionPort):
         dynamic_colors = [
             np.array([[10, 20, 30], [40, 50, 60]], dtype=np.uint8),
             np.zeros((0, 3), dtype=np.uint8),
+            np.array([[70, 80, 90]], dtype=np.uint8),
+        ]
+
+        tracks = Tracks(
+            positions=np.array(
+                [
+                    [[0.1, 0.1, 0.1], [0.15, 0.12, 0.1], [0.2, 0.14, 0.1]],
+                    [[0.9, 0.9, 0.9], [0.85, 0.88, 0.9], [0.8, 0.86, 0.9]],
+                ],
+                dtype=np.float32,
+            ),
+            visibility=np.array(
+                [[True, True, False], [False, True, True]], dtype=bool
+            ),
+            colors=np.array([[200, 10, 10], [10, 200, 10]], dtype=np.uint8),
+        )
+
+        cameras = CameraTrack(
+            poses=np.array(
+                [
+                    [0, 0, 0, 1, 0.0, 0, 3],
+                    [0, 0, 0, 1, 0.1, 0, 3],
+                    [0, 0, 0, 1, 0.2, 0, 3],
+                ],
+                dtype=np.float32,
+            ),
+            intrinsics=np.array(
+                [
+                    [1.2, 1.2, 0.5, 0.5],
+                    [1.2, 1.2, 0.5, 0.5],

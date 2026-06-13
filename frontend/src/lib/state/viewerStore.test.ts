@@ -58,3 +58,33 @@ describe("viewerStore actions (T-170)", () => {
     useViewerStore.getState().pause();
     expect(useViewerStore.getState().isPlaying).toBe(false);
   });
+
+  it("setTime sets a value within [0,1]", () => {
+    useViewerStore.getState().setTime(0.42);
+    expect(useViewerStore.getState().time).toBe(0.42);
+  });
+
+  it("setTime clamps below 0 and above 1", () => {
+    useViewerStore.getState().setTime(-5);
+    expect(useViewerStore.getState().time).toBe(0);
+    useViewerStore.getState().setTime(5);
+    expect(useViewerStore.getState().time).toBe(1);
+    // Boundaries pass through unchanged.
+    useViewerStore.getState().setTime(0);
+    expect(useViewerStore.getState().time).toBe(0);
+    useViewerStore.getState().setTime(1);
+    expect(useViewerStore.getState().time).toBe(1);
+  });
+
+  it("toggleLoop flips loop", () => {
+    expect(useViewerStore.getState().loop).toBe(true);
+    useViewerStore.getState().toggleLoop();
+    expect(useViewerStore.getState().loop).toBe(false);
+    useViewerStore.getState().toggleLoop();
+    expect(useViewerStore.getState().loop).toBe(true);
+  });
+
+  it("setFrozen(true) sets frozen", () => {
+    useViewerStore.getState().setFrozen(true);
+    expect(useViewerStore.getState().frozen).toBe(true);
+    useViewerStore.getState().setFrozen(false);

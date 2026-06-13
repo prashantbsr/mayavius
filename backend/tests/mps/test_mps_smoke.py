@@ -178,3 +178,33 @@ def test_vggt_cotracker3_smoke(capsys) -> None:
 
     t0 = time.perf_counter()
     scene = adapter.reconstruct(req)  # RAW Scene4D (combo returns RAW; we cap below)
+    wall_s = time.perf_counter() - t0
+    peak_gb = _peak_mps_gb()
+
+    assert isinstance(scene, Scene4D), type(scene)
+
+    # The combo returns a RAW scene; apply the cap step (the service does this in prod)
+    # so we validate the SAME caps the encoder ships under (spec/06 §5 step 7).
+    capped = enforce_caps(scene)
+
+    # ≥1 static point AND ≥1 track (the "cloud + ribbons" wow, spec/10 §5 T-510).
+    assert capped.static_positions.shape[0] >= 1, "expected ≥1 static point"
+    assert capped.tracks is not None and capped.tracks.positions.shape[0] >= 1, (
+        "expected ≥1 track"
+    )
+
+    # Encodes to MV4D within caps (chains T-100 / T-104): encode → decode → re-check.
+    buf = encode_reconstruction(capped)
+    assert buf[:4] == b"MV4D"
+    decoded = decode(buf)
+
+    assert 1 <= decoded.frame_count <= _MAX_FRAMES
+    assert decoded.static_positions.shape[0] <= _MAX_STATIC
+    assert len(decoded.dynamic_positions) == decoded.frame_count
+    for frame in decoded.dynamic_positions:
+        assert frame.shape[0] <= _MAX_DYNAMIC_PER_FRAME
+    assert decoded.tracks is not None
+    assert decoded.tracks.positions.shape[0] <= _MAX_TRACKS
+    assert decoded.tracks.positions.shape[1] == decoded.frame_count
+
+    # MEASURE + PRINT (do NOT assert a GB threshold — the numbers are outputs).

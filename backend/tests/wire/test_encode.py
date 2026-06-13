@@ -118,3 +118,33 @@ def _build_representative_scene(seed: int = 7) -> Scene4D:
         static_colors=static_colors,
         static_conf=static_conf,
         dynamic_positions=dynamic_positions,
+        dynamic_colors=dynamic_colors,
+        tracks=tracks,
+        cameras=cameras,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# T-100 — full round-trip
+# --------------------------------------------------------------------------- #
+def test_t100_roundtrip_all_sections():
+    scene = _build_representative_scene()
+    buf = encode_reconstruction(scene)
+    out = decode(buf)
+
+    # counts exact
+    assert out.frame_count == scene.frame_count
+    assert out.fps == pytest.approx(scene.fps)
+    assert out.static_positions.shape == scene.static_positions.shape
+    assert len(out.dynamic_positions) == scene.frame_count
+    for t in range(scene.frame_count):
+        assert out.dynamic_positions[t].shape == scene.dynamic_positions[t].shape
+    assert out.tracks is not None
+    assert out.tracks.positions.shape == scene.tracks.positions.shape
+    assert out.cameras is not None
+
+    # colors u8 exact
+    np.testing.assert_array_equal(out.static_colors, scene.static_colors)
+    for t in range(scene.frame_count):
+        np.testing.assert_array_equal(out.dynamic_colors[t], scene.dynamic_colors[t])
+    np.testing.assert_array_equal(out.tracks.colors, scene.tracks.colors)

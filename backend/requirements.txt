@@ -1,7 +1,10 @@
-# mayavius backend — lightweight runtime deps (NO ML; see requirements-ml.txt).
-# Pinned to the versions installed during scaffolding (Python 3.10, June 2026).
+# mayavius backend — lightweight runtime deps (NO torch/ML; see requirements-ml.txt).
+# Pinned to verified versions (June 2026). numpy is here (not in requirements-ml.txt)
+# because the model-agnostic CORE (domain Scene4D arrays + the MV4D wire encoder)
+# imports it, so the no-ML W0/W1 CI path (spec/10 T-130) must have it.
 fastapi==0.136.3
 uvicorn[standard]==0.49.0
 python-multipart==0.0.32
 pydantic==2.13.4
 pydantic-settings==2.14.1
+numpy>=2,<3

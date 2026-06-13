@@ -1,0 +1,8 @@
+{
+  "name": "pet-motion",
+  "source_url": "https://commons.wikimedia.org/wiki/File:Puppy_playing.webm",
+  "license": "CC-BY-SA-3.0",
+  "attribution": "Subhashish Panigrahi — Wikimedia Commons, https://commons.wikimedia.org/wiki/File:Puppy_playing.webm , CC BY-SA 3.0.",
+  "duration_s": 2.47,
+  "expected": "Non-rigid moving subject (a puppy moving across a room) animates; the handheld camera motion is absorbed into the per-frame CameraTrack so the background stays put under orbit."
+}

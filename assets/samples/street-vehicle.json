@@ -1,0 +1,8 @@
+{
+  "name": "street-vehicle",
+  "source_url": "https://commons.wikimedia.org/wiki/File:Road_traffic_%E2%80%93_cobblestone_road.webm",
+  "license": "CC-BY-3.0",
+  "attribution": "barbara.grilc (video recording: Barbara Rezar Grilc) — Wikimedia Commons, https://commons.wikimedia.org/wiki/File:Road_traffic_%E2%80%93_cobblestone_road.webm , CC BY 3.0.",
+  "duration_s": 2.6,
+  "expected": "The vehicle (a sedan crossing the foreground from the archway) is a coherent moving point cluster with smooth track ribbons; the parked cars + buildings stay in the static cloud."
+}

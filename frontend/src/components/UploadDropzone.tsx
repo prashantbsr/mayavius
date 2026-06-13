@@ -88,3 +88,33 @@ export function UploadDropzone() {
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setDragActive(false);
+      const file = e.dataTransfer.files?.[0];
+      if (file) void handleFile(file);
+    },
+    [handleFile],
+  );
+
+  const onDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(true);
+  }, []);
+
+  const onDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+  }, []);
+
+  const openPicker = useCallback(() => inputRef.current?.click(), []);
+
+  return (
+    <div className="flex w-full max-w-xl flex-col items-center gap-3">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Upload a video clip"
+        aria-busy={submitting}
+        onClick={openPicker}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {

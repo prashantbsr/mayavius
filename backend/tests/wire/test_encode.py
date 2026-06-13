@@ -298,3 +298,33 @@ def test_t103_aabb_spans_all_sections():
     static_positions = np.array([[-10.0, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=np.float32)  # min x
     dyn0 = np.array([[0.0, 50.0, 0.0]], dtype=np.float32)  # max y
     dyn1 = np.array([[0.0, 0.0, -7.0]], dtype=np.float32)  # min z
+    track_positions = np.array(
+        [[[0.0, 0.0, 99.0], [3.0, 0.0, 0.0]]], dtype=np.float32
+    )  # max z, mid x
+
+    scene = Scene4D(
+        frame_count=T,
+        fps=10.0,
+        aabb_min=np.zeros(3, np.float32),  # deliberately WRONG — encoder must recompute
+        aabb_max=np.zeros(3, np.float32),
+        static_positions=static_positions,
+        static_colors=np.zeros((2, 3), np.uint8),
+        static_conf=None,
+        dynamic_positions=[dyn0, dyn1],
+        dynamic_colors=[np.zeros((1, 3), np.uint8), np.zeros((1, 3), np.uint8)],
+        tracks=Tracks(
+            positions=track_positions,
+            visibility=np.ones((1, T), bool),
+            colors=None,
+        ),
+        cameras=None,
+    )
+    buf = encode_reconstruction(scene)
+    out = decode(buf)
+
+    all_pts = np.concatenate(
+        [static_positions, dyn0, dyn1, track_positions.reshape(-1, 3)], axis=0
+    )
+    expected_min = all_pts.min(axis=0)
+    expected_max = all_pts.max(axis=0)
+    np.testing.assert_allclose(out.aabb_min, expected_min, atol=1e-5)

@@ -148,3 +148,11 @@ def lift_tracks_to_3d(
         z_cam = D
         p_cam = np.stack([x_cam, y_cam, z_cam], axis=1).astype(np.float32)  # (M,3)
 
+        # camera->world, then OpenCV->mayavius axis flip.
+        p_world = p_cam @ R.T + tr[None, :]            # (M,3)
+        p_may = (p_world * _F[None, :]).astype(np.float32)
+
+        positions[:, t, :] = np.where(valid[:, None], p_may, 0.0).astype(np.float32)
+        out_vis[:, t] = valid
+
+    return positions, out_vis

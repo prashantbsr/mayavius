@@ -28,3 +28,33 @@ def _make_vggt_cotracker3(settings):
 def _make_vggt(settings):
     from app.adapters.vggt_adapter import VggtAdapter  # lazy
 
+    return VggtAdapter(settings)
+
+
+def _make_cotracker3(settings):
+    from app.adapters.cotracker3_adapter import CoTracker3Adapter  # lazy
+
+    return CoTracker3Adapter(settings)
+
+
+def _make_spatialtracker_v2(settings):
+    from app.adapters.spatialtracker_adapter import SpatialTrackerV2Adapter  # lazy
+
+    return SpatialTrackerV2Adapter(settings)
+
+
+def _make_pi3(settings):
+    from app.adapters.pi3_adapter import Pi3Adapter  # lazy
+
+    return Pi3Adapter(settings)
+
+
+def _make_open_d4rt(settings):
+    from app.adapters.open_d4rt_adapter import OpenD4RTAdapter  # lazy
+
+    return OpenD4RTAdapter(settings)
+
+
+def _make_fixture(settings):
+    from app.adapters.fixture_adapter import FixtureAdapter  # lazy (no torch anyway)
+

@@ -28,3 +28,33 @@ export default async function Image({ params }: Props) {
         style={{
           width: "100%",
           height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          justifyContent: "center",
+          gap: 28,
+          padding: "80px 96px",
+          background:
+            "radial-gradient(120% 120% at 0% 0%, #161827 0%, #07080d 60%)",
+          color: "#f5f6fb",
+          fontFamily: "sans-serif",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            fontSize: 96,
+            fontWeight: 700,
+            letterSpacing: "-0.04em",
+          }}
+        >
+          {SITE_NAME}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            fontSize: 36,
+            opacity: 0.78,
+          }}
+        >
+          interactive 4D scene reconstruction

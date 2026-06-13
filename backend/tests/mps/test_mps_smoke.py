@@ -148,3 +148,33 @@ def test_vggt_cotracker3_smoke(capsys) -> None:
     from app.core.services.reconstruction_service import enforce_caps
     from app.wire.decoder import decode
     from app.wire.encoder import encode_reconstruction
+
+    # MV4D caps (spec/05 §4) — verified post-encode against the decoded scene.
+    _MAX_STATIC = 150_000
+    _MAX_DYNAMIC_PER_FRAME = 20_000
+    _MAX_TRACKS = 4_096
+    _MAX_FRAMES = 64
+
+    from app.core.domain.models import ReconstructionRequest
+
+    # device "mps" (MAYAVIUS_DEVICE=mps); a short clip so it fits the 36 GB Mac.
+    req = ReconstructionRequest(
+        video_path=str(_SAMPLE_CLIP),
+        max_frames=min(getattr(settings, "max_clip_frames", 8), 8),
+        target_fps=getattr(settings, "target_fps", 12.0),
+        device="mps",
+    )
+
+    # Reset the MPS peak counter if the API exists (best-effort).
+    mps = getattr(torch, "mps", None)
+    if mps is not None and hasattr(mps, "empty_cache"):
+        try:
+            mps.empty_cache()
+        except Exception:
+            pass
+
+    adapter = VggtCoTracker3Adapter(settings)
+    assert adapter.info.weights_license  # D2 license surface
+
+    t0 = time.perf_counter()
+    scene = adapter.reconstruct(req)  # RAW Scene4D (combo returns RAW; we cap below)

@@ -58,3 +58,33 @@ def golden_scene() -> Scene4D:
     track_colors = np.array([[200, 10, 10], [10, 200, 10]], dtype=np.uint8)
     tracks = Tracks(
         positions=track_positions,
+        visibility=track_visibility,
+        colors=track_colors,
+    )
+
+    # cameras: T = 3 — poses {qx,qy,qz,qw,tx,ty,tz}, intrinsics {fx,fy,cx,cy}
+    poses = np.array(
+        [
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 3.0],
+            [0.0, 0.0, 0.0, 1.0, 0.1, 0.0, 3.0],
+            [0.0, 0.0, 0.0, 1.0, 0.2, 0.0, 3.0],
+        ],
+        dtype=np.float32,
+    )
+    intrinsics = np.array(
+        [
+            [1.2, 1.2, 0.5, 0.5],
+            [1.2, 1.2, 0.5, 0.5],
+            [1.2, 1.2, 0.5, 0.5],
+        ],
+        dtype=np.float32,
+    )
+    cameras = CameraTrack(poses=poses, intrinsics=intrinsics)
+
+    return Scene4D(
+        frame_count=3,
+        fps=24.0,
+        aabb_min=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+        aabb_max=np.array([1.0, 1.0, 0.9], dtype=np.float32),
+        static_positions=static_positions,
+        static_colors=static_colors,

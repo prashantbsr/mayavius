@@ -148,3 +148,33 @@ def _decode_cv2(video_path: str) -> tuple[list[np.ndarray], float]:
         cap.release()
         return [], 0.0
     src_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+    frames: list[np.ndarray] = []
+    ok, frame = cap.read()
+    while ok:
+        if frame is not None:
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        ok, frame = cap.read()
+    cap.release()
+    return frames, src_fps
+
+
+def _decode_imageio(video_path: str) -> tuple[list[np.ndarray], float]:
+    """Fallback decode via imageio[ffmpeg] → (list of HWC RGB uint8 frames, fps)."""
+    import imageio.v3 as iio  # lazy
+
+    frames: list[np.ndarray] = []
+    src_fps = 0.0
+    try:
+        meta = iio.immeta(video_path, plugin="pyav")
+        src_fps = float(meta.get("fps", 0.0) or 0.0)
+    except Exception:  # pragma: no cover - meta is best-effort
+        src_fps = 0.0
+    for frame in iio.imiter(video_path, plugin="pyav"):
+        arr = np.asarray(frame)
+        if arr.ndim == 2:  # grayscale -> RGB
+            arr = np.repeat(arr[..., None], 3, axis=2)
+        frames.append(arr[..., :3].astype(np.uint8))
+    return frames, src_fps
+
+
+def decode_and_subsample(request) -> np.ndarray:

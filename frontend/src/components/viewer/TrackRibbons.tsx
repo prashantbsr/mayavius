@@ -88,3 +88,33 @@ function buildRibbonGroup(scene: Mv4dScene): THREE.Group | null {
       while (t < T && tracks.isVisible(m, t)) t++;
       const runEnd = t - 1; // inclusive
       const pointCount = runEnd - runStart + 1;
+      if (pointCount < 2) continue; // a single visible point = no segment, no ribbon
+
+      // CPU dequant this run's points to world-space Float32 (spec/07 §2.2).
+      const positions = new Float32Array(pointCount * 3);
+      for (let k = 0; k < pointCount; k++) {
+        const base = (m * T + (runStart + k)) * 3;
+        positions[k * 3 + 0] = dequantize(q[base + 0], minX, maxX);
+        positions[k * 3 + 1] = dequantize(q[base + 1], minY, maxY);
+        positions[k * 3 + 2] = dequantize(q[base + 2], minZ, maxZ);
+      }
+
+      const geometry = new LineGeometry();
+      geometry.setPositions(positions);
+      // Start with the full trail hidden; the loop grows it from t.
+      geometry.instanceCount = 0;
+
+      if (!material) {
+        material = new LineMaterial({
+          color: color.getHex(THREE.SRGBColorSpace),
+          linewidth: DEFAULT_LINE_WIDTH_PX,
+          worldUnits: false, // screen-space px width (spec/07 §2.2)
+          transparent: true,
+          opacity: 0.9,
+        });
+      }
+
+      const line = new Line2(geometry, material);
+      line.frustumCulled = false;
+      const meta: RunMeta = { startFrame: runStart, segmentCount: pointCount - 1 };
+      line.userData = meta;

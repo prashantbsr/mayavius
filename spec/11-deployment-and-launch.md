@@ -249,3 +249,84 @@ one click → instant `/view/[id]` result, no waiting, no GPU.
 
 ---
 
+## 5. STAR MECHANICS — the launch playbook (handover §5/§8)
+
+> **README top line (verbatim target):** *open-source, lightweight, interactive,
+> no GPU required to view, running the actual frontier 4D research models — drop
+> in your own video.*
+
+Apps go viral when a stranger can try them in **ten seconds** and get a
+shareable, screenshot-able result. The required surfaces:
+
+| # | Surface | Spec |
+|---|---------|------|
+| 1 | **README opens with an animated GIF** | the GIF *is* the pitch: orbit + timeline scrub + a moving object trailing ribbons over a static cloud (bullet-time freeze-and-orbit beat). Above the fold, before any prose. Loop ≤6 s |
+| 2 | **Hosted link, 3–4 preloaded examples** | magic before upload (§4); one-click `/view/<slug>` |
+| 3 | **Shareable result URLs** | `/view/[id]` with per-result `generateMetadata` rich share card (the virality surface; needs SSR host §3) |
+| 4 | **"Runs locally on a Mac" path** | the §1 three-command quick start, prominent for the dev/HN crowd ("no GPU required to view; MPS for your own clips") |
+| 5 | **Coordinated launch** | HN + r/computervision + X, same day. Template = the **"Show HN: Spark"** thread (lead with the visual, the live link, and the "try your own" hook; be present to answer in-thread) |
+
+**README structure (build the README to this skeleton):**
+1. GIF (the pitch) + one-line tagline (the top line above).
+2. Live demo link + "try a preloaded example" buttons.
+3. "Runs locally on a Mac" three-command quick start (§1.1).
+4. What it is: feedforward 4D — colored point cloud + 3D track ribbons, Path 1.
+5. How it works: drop clip → FastAPI async job → MV4D blob → client viewer.
+6. **License honesty block:** MIT code; **default weights are non-commercial**
+   (VGGT-1B, cotracker3 = cc-by-nc-4.0), clearly labeled; commercial static-only
+   path = VGGT-1B-Commercial (gated AUP); no commercial tracker exists yet (D2).
+7. Architecture one-liner + link to [04-architecture.md](04-architecture.md)
+   (hexagonal, swappable adapters; Path 2 / Spark 4DGS designed-for, not built).
+8. Roadmap: Path 2 (Spark `<SplatMesh>` at the `Scene4D` seam), OpenD4RT adapter,
+   commercial tracker — framed as future direction, not MVP scope.
+
+**Launch-day checklist:**
+- [ ] Demo Space is up, warm, and the 3–4 examples open instantly.
+- [ ] README GIF renders on GitHub (file-size sane, autoplay-on-load).
+- [ ] Share card verified — paste a `/view/[id]` link into X/Slack → OG card renders. The per-result dynamic image is `app/view/[id]/opengraph-image.tsx` via `next/og` (owned by [07 §8](07-frontend-spec.md), 1200×630, result thumbnail + title). **MVP-acceptable fallback:** if the frame-thumbnail pipeline isn't ready, ship the static `/og.png` with per-result `title`/`description` — the card still renders.
+- [ ] License label visible in-app and in README.
+- [ ] §6 novelty sweep re-run and findings recorded.
+- [ ] HN/r-cv/X posts drafted; author available for the first few hours.
+
+---
+
+## 6. Pre-launch novelty sweep (do this right before launch)
+
+This is a **fast-moving space**; the differentiation is the **combination**
+(open + feedforward + point-cloud + track ribbons + client-only shareable viewer
++ GPU-free viewing), not any single component. Absence of a competitor is
+unfalsifiable, so re-verify immediately before the post and **state novelty
+defensively ("none surfaced as of <date>"), never absolutely** (decision-log §F).
+
+**Sweep procedure (record dated findings in the decision log):**
+
+| Source | Query intent |
+|--------|--------------|
+| GitHub | open browser-upload feedforward 4D viewer; shareable 4D result links; "video to 4D" web apps |
+| arXiv / Papers with Code | new feedforward 4D-from-casual-video (e.g. MoRe-class, TracksTo4D successors) |
+| Hugging Face Spaces | VGGT/Any4D/D4RT-style demo Spaces — note: server-side, transient, no permalink (the gap we fill) |
+| D4RT status | official Google DeepMind D4RT still unreleased? (was unreleased 2026-06-13); OpenD4RT progress |
+| X / blogs | "Show HN"-style launches of anything adjacent |
+
+**If a direct open competitor to *this exact app* has appeared:** surface it,
+sharpen the differentiation in the README and the launch post, **do not silently
+proceed** (handover §2). If none surfaced, ship — and say "none surfaced as of
+\<launch date\>".
+
+---
+
+## 7. Deployment summary
+
+| Concern | Local (primary) | HF Space (optional) | Frontend host |
+|---------|-----------------|---------------------|---------------|
+| Required for MVP? | **yes** | no | no (local `next dev` suffices) |
+| Device | MPS (fp32) / CPU | CUDA | n/a (client-only viewer) |
+| Adapters | vggt+cotracker3 | + SpatialTrackerV2 / Pi3 / OpenD4RT | n/a |
+| Weights license gate | NC, labeled | NC demo (or gated commercial static-only) | n/a |
+| GPU to **view** result | **no** | no | no |
+| GPU to **reconstruct** | MPS | CUDA | n/a |
+| Touches `app/core`? | **no** | **no** | n/a |
+
+The local Mac path is the product's spine; the Space makes it snappy for
+strangers; the frontend host makes results shareable. The star mechanics turn
+all three into GitHub stars.

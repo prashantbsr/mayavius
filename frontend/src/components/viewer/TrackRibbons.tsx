@@ -118,3 +118,33 @@ function buildRibbonGroup(scene: Mv4dScene): THREE.Group | null {
       line.frustumCulled = false;
       const meta: RunMeta = { startFrame: runStart, segmentCount: pointCount - 1 };
       line.userData = meta;
+      group.add(line);
+    }
+  }
+
+  return group;
+}
+
+export function TrackRibbons({ scene }: { scene: Mv4dScene }) {
+  // Construct once per scene — a pure derivation, no mutation here.
+  const group = useMemo(() => buildRibbonGroup(scene), [scene]);
+  // The mounted group, captured outside render; ALL mutation goes here.
+  const groupRef = useRef<THREE.Group | null>(null);
+  // Remember the last resolution so we re-set LineMaterial.resolution on resize
+  // (required for px-accurate widths, spec/07 §2.2) without per-frame churn.
+  const lastW = useRef<number>(0);
+  const lastH = useRef<number>(0);
+  const lastFrame = useRef<number>(-1);
+
+  // Dispose geometries + materials when the scene changes / on unmount.
+  useEffect(
+    () => () => {
+      if (!group) return;
+      const seen = new Set<LineMaterial>();
+      for (const child of group.children) {
+        const line = child as Line2;
+        line.geometry.dispose();
+        const mat = line.material as LineMaterial;
+        if (!seen.has(mat)) {
+          seen.add(mat);
+          mat.dispose();

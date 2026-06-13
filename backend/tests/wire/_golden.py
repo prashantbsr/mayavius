@@ -88,3 +88,9 @@ def golden_scene() -> Scene4D:
         aabb_max=np.array([1.0, 1.0, 0.9], dtype=np.float32),
         static_positions=static_positions,
         static_colors=static_colors,
+        static_conf=static_conf,
+        dynamic_positions=dynamic_positions,
+        dynamic_colors=dynamic_colors,
+        tracks=tracks,
+        cameras=cameras,
+    )

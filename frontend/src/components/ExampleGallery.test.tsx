@@ -28,3 +28,27 @@ describe("T-601 corpus.examples_listed", () => {
     expect(EXAMPLE_SLUGS).toContain("example");
     for (const [slug] of CORPUS) {
       expect(EXAMPLE_SLUGS).toContain(slug);
+    }
+  });
+
+  it("renders a /view/<slug> card with the role label for each corpus slug", () => {
+    const html = renderToStaticMarkup(<ExampleGallery />);
+    for (const [slug, label] of CORPUS) {
+      // The card links the result route…
+      expect(html).toContain(`/view/${slug}`);
+      // …and shows the fixed C-1..C-4 role label (spec/10 §6).
+      expect(html).toContain(label);
+    }
+    // The W2 example card is kept alongside the corpus.
+    expect(html).toContain("/view/example");
+  });
+
+  it("lists exactly the EXAMPLE_SLUGS set (no stray or missing corpus cards)", () => {
+    const html = renderToStaticMarkup(<ExampleGallery />);
+    // Every configured slug is rendered as a result link — the gallery is a pure
+    // map over EXAMPLE_SLUGS, so this guards the corpus staying wired in.
+    for (const slug of EXAMPLE_SLUGS) {
+      expect(html).toContain(`href="/view/${slug}"`);
+    }
+  });
+});

@@ -88,3 +88,33 @@ def test_job_result_is_mv4d(client) -> None:
     assert "immutable" in r.headers["cache-control"]
 
     scene = decode(r.content)  # chains T-100
+    assert scene.frame_count >= 1
+
+
+# --- T-305 ---------------------------------------------------------------------
+def test_unknown_job_404(client) -> None:
+    assert client.get("/jobs/does-not-exist").status_code == 404
+
+
+# --- T-306 ---------------------------------------------------------------------
+def test_clip_frame_cap(client) -> None:
+    job_id = client.post("/jobs", files=_multipart()).json()["job_id"]
+    _poll_until_terminal(client, job_id)
+    scene = decode(client.get(f"/jobs/{job_id}/result").content)
+    assert scene.frame_count <= 64
+
+
+# --- T-307 ---------------------------------------------------------------------
+def test_upload_rejections(client) -> None:
+    # Oversize upload -> 413 (set a tiny cap, POST a slightly larger video body).
+    original = settings.max_upload_mb
+    settings.max_upload_mb = 1  # 1 MB cap
+    try:
+        big = b"\x00" * (1 * 1024 * 1024 + 1024)  # just over 1 MB
+        r = client.post("/jobs", files=_multipart(body=big))
+        assert r.status_code == 413
+    finally:
+        settings.max_upload_mb = original
+
+    # Non-video content-type -> 415.
+    r = client.post("/jobs", files={"clip": ("x.txt", b"not a video", "text/plain")})

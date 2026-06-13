@@ -28,3 +28,33 @@ test.describe("T-403 timeline.scrub", () => {
     const scrubber = 'input[aria-label="Timeline"]';
     await expect(page.locator(scrubber)).toBeVisible();
 
+    // Start at 0.
+    await scrubTimeline(page, scrubber, 0, 0, 1);
+    const timeAtStart = (await storeField<number>(page, "time")) ?? -1;
+    expect(timeAtStart).toBeCloseTo(0, 5);
+
+    // Collect frameIndex across a full scrub 0→1, capturing the SET of frames the
+    // renderer showed (mirror T-303: assert the observed set, not one snapshot).
+    const frames = new Set<number>();
+    const times = new Set<number>();
+    const N = 10;
+    for (let i = 0; i <= N; i++) {
+      const v = i / N;
+      await scrubTimeline(page, scrubber, v, v, 1);
+      // Let one R3F frame publish the debug surface for this time.
+      await page.waitForTimeout(60);
+      frames.add(await debugNumber(page, "frameIndex", -1));
+      times.add((await storeField<number>(page, "time")) ?? -1);
+    }
+
+    // time moved across [0,1].
+    const maxTime = Math.max(...times);
+    const minTime = Math.min(...times);
+    expect(minTime).toBeLessThanOrEqual(0.01);
+    expect(maxTime).toBeGreaterThanOrEqual(0.99);
+
+    // The rendered frame index changed (the dynamic cluster moved over the static
+    // background). With a multi-frame scene this set spans ≥2 distinct frames.
+    expect(
+      frames.size,
+      `frameIndex should span >1 frame across a full scrub, saw ${JSON.stringify([...frames])}`,

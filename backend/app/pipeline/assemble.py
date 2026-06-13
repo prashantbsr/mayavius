@@ -208,3 +208,33 @@ def assemble_scene4d(
     # ---- AABB over all VGGT points + lifted tracks → radius / voxel / motion floor.
     #      ``amin`` anchors the static voxel-dedup grid (just a grid origin).
     flat_wp = world_points.reshape(-1, 3)
+    amin, _amax, diag = _aabb_over(flat_wp, tr_pos.reshape(-1, 3))
+    radius = _DYNAMIC_RADIUS_FRAC * diag
+    voxel = _VOXEL_FRAC * diag
+    net_floor = _MOTION_NET_FLOOR_FRAC * diag        # main split (net excursion)
+    motion_floor = _MOTION_ABS_FLOOR_FRAC * diag     # per-frame floor (sparse fallback path)
+
+    # ---- moving track samples (the dynamic "seeds"): tracks with large NET excursion.
+    moving_samples = _moving_track_samples(tr, motion_thresh, net_floor)
+
+    # If VGGT per-frame maps are absent/degenerate, fall back to sparse moving tracks.
+    vggt_usable = world_points.size > 0 and np.isfinite(world_points).any()
+
+    dynamic_positions: list[np.ndarray] = []
+    dynamic_colors: list[np.ndarray] = []
+    static_chunks_p: list[np.ndarray] = []
+    static_chunks_c: list[np.ndarray] = []
+    static_chunks_conf: list[np.ndarray] = []
+
+    fallback_used = False
+
+    if vggt_usable and moving_samples.shape[0] > 0:
+        for t in range(S):
+            pts = world_points[t].reshape(-1, 3)             # (H*W,3)
+            cnf = wp_conf[t].reshape(-1) if wp_conf.size else np.zeros(pts.shape[0], np.float32)
+            finite = np.isfinite(pts).all(axis=1)
+            pts_f = pts[finite]
+            cnf_f = cnf[finite]
+            # frame-t color: VGGT world map has no color; derive a grayscale-ish
+            # color from confidence is wrong — instead colors come from the source
+            # frame in a real run. Here the per-point color is supplied by the

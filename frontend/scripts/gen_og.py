@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""Deterministically generate frontend/public/og.png — the branded share card.
+
+No third-party deps (no Pillow): a hand-rolled 1200x630 RGB PNG via zlib only,
+drawn with a tiny built-in 5x7 pixel font. Dark background, "mayavius" wordmark,
+and the one-line tagline. Re-run to regenerate byte-stably:
+
+    python3 frontend/scripts/gen_og.py
+
+Output: a valid PNG (8-bit RGB, color type 2) at frontend/public/og.png.
+"""
+from __future__ import annotations
+
+import struct
+import zlib
+from pathlib import Path
+
+W, H = 1200, 630
+BG = (0x0A, 0x0A, 0x12)          # near-black, slight blue
+FG = (0xE8, 0xEA, 0xF6)          # off-white wordmark
+SUB = (0x8A, 0x90, 0xB8)         # muted lavender-grey tagline
+ACCENT = (0x6E, 0x8B, 0xFF)      # accent rule
+
+# 5x7 uppercase/lowercase-agnostic pixel font. Each glyph = 7 rows of 5 bits.
+FONT: dict[str, list[str]] = {
+    "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "B": ["11110", "10001", "11110", "10001", "10001", "10001", "11110"],
+    "C": ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+    "D": ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+    "E": ["11111", "10000", "11110", "10000", "10000", "10000", "11111"],

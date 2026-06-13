@@ -28,3 +28,33 @@ def ensure_tiny_mp4(out_path: str | Path) -> Path | None:
     """
     out = Path(out_path)
     if out.exists() and out.stat().st_size > 256:
+        # Verify it is genuinely decodable; if not, regenerate.
+        if _is_decodable(out):
+            return out
+
+    try:
+        import cv2
+    except Exception:
+        return None
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(str(out), fourcc, _FPS, (_W, _H))
+    if not writer.isOpened():
+        return None
+    rng = np.random.default_rng(0)
+    for i in range(_N):
+        frame = (rng.random((_H, _W, 3)) * 255).astype(np.uint8)
+        frame[:, :, i % 3] = (i * 20) % 256  # a little structure per frame
+        writer.write(frame)
+    writer.release()
+
+    if not _is_decodable(out):
+        return None
+    return out
+
+
+def _is_decodable(path: Path) -> bool:
+    try:
+        import cv2
+    except Exception:

@@ -1,4 +1,4 @@
-"""Binary wire-format encoder (backend side).
+"""Binary wire-format encoder (backend side) — MV4D v1.
 
 JSON is forbidden for point payloads (handover §4.5) — it is the difference
 between a ~2s and a ~40s load and it gates shareable result links. This encoder

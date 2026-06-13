@@ -58,3 +58,17 @@ export function ExampleGallery() {
               <img
                 src="/og.png"
                 alt={`${slugLabel(slug)} preview`}
+                width={1200}
+                height={630}
+                className="aspect-[1200/630] w-full bg-black object-cover"
+              />
+              <span className="px-4 py-3 text-left text-sm font-medium">
+                {slugLabel(slug)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

@@ -118,3 +118,33 @@ def test_lift_marks_depth_hole_invisible() -> None:
     depth = np.zeros((1, H, W), dtype=np.float32)  # all holes
     tracks_2d = np.array([[[10.0, 10.0]]], dtype=np.float32)
     visibility = np.array([[True]], dtype=bool)
+    intrinsics = np.array([10.0, 10.0, 10.0, 10.0], dtype=np.float32)
+    c2w = np.eye(4, dtype=np.float32)
+
+    _, vis_out = lift_tracks_to_3d(tracks_2d, visibility, depth, intrinsics, c2w)
+    assert not vis_out[0, 0]
+
+
+def test_lift_out_of_bounds_pixel_invisible() -> None:
+    """A pixel outside the depth grid is invisible (no out-of-range crash)."""
+    H, W = 16, 16
+    depth = np.ones((1, H, W), dtype=np.float32) * 2.0
+    tracks_2d = np.array([[[100.0, 100.0]]], dtype=np.float32)  # OOB
+    visibility = np.array([[True]], dtype=bool)
+    intrinsics = np.array([10.0, 10.0, 8.0, 8.0], dtype=np.float32)
+    c2w = np.eye(4, dtype=np.float32)
+    _, vis_out = lift_tracks_to_3d(tracks_2d, visibility, depth, intrinsics, c2w)
+    assert not vis_out[0, 0]
+
+
+# ---------------------------------------------------------------------------
+# (b) quantize_positions — encoder/decoder inverse + degenerate axis
+# ---------------------------------------------------------------------------
+
+def _dequantize(q: np.ndarray, amin: np.ndarray, amax: np.ndarray) -> np.ndarray:
+    span = (amax - amin).astype(np.float32)
+    return (amin + q.astype(np.float32) / np.float32(_QMAX) * span).astype(np.float32)
+
+
+def test_quantize_roundtrip_within_one_lsb() -> None:
+    """quantize -> dequantize reconstructs each position within one quantization step."""

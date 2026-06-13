@@ -208,3 +208,32 @@ def decode_and_subsample(request) -> np.ndarray:
         except ImportError as exc:
             if cv2_err is not None:
                 raise UnsupportedMediaError(
+                    "no video backend available: install opencv-python or imageio[ffmpeg] "
+                    "(spec/08 §4.2)"
+                ) from exc
+            raise UnsupportedMediaError(
+                f"could not decode {video_path!r}: cv2 found no frames and imageio is absent"
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise UnsupportedMediaError(f"could not decode {video_path!r}: {exc}") from exc
+
+    if not frames:
+        raise UnsupportedMediaError(f"no decodable frames in {video_path!r}")
+
+    keep = _subsample_indices(len(frames), src_fps, target_fps, max_frames)
+    if keep.shape[0] == 0:
+        raise UnsupportedMediaError(f"no frames left after subsample for {video_path!r}")
+    kept_frames = [frames[i] for i in keep.tolist()]
+
+    out = _to_chw_rgb_518(kept_frames)
+    logger.info(
+        "decoded %s: src_frames=%d src_fps=%.3f -> S=%d shape=%s (target_fps=%.1f max_frames=%d)",
+        video_path,
+        len(frames),
+        src_fps,
+        out.shape[0],
+        tuple(out.shape),
+        target_fps,
+        max_frames,
+    )
+    return out

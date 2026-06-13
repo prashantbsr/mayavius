@@ -58,3 +58,19 @@ test.describe("T-402 upload.flow", () => {
     // mid-flight DOM frame. (We do NOT assert global monotonicity here: the SSE
     // late-subscriber path legitimately replays the buffered running events, which
     // can revisit a lower value — that is T-303's poll-ordering concern, not this
+    // flow's. What matters for T-402 is that an intermediate value was observed.)
+    await expect
+      .poll(() => progressSeen(page), {
+        timeout: 15_000,
+        intervals: [100, 200, 300],
+      })
+      .toEqual(expect.arrayContaining([1]));
+
+    const seen = await progressSeen(page);
+    const intermediate = seen.filter((p) => p > 0 && p < 1);
+    expect(
+      intermediate.length,
+      `expected ≥1 intermediate progress 0<p<1, saw ${JSON.stringify(seen)}`,
+    ).toBeGreaterThan(0);
+  });
+});

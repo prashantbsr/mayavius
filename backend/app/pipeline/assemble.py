@@ -58,3 +58,33 @@ _DIST_CHUNK = 4096              # row-chunk for the brute-force (N,M) distance q
 
 
 @dataclass
+class GeometryResult:
+    """VGGT geometry, ALREADY in mayavius world space (spec/06 §4.5a)."""
+
+    world_points: np.ndarray       # (S, H, W, 3) f32, mayavius world space
+    world_points_conf: np.ndarray  # (S, H, W)    f32
+    depth: np.ndarray              # (S, H, W)    f32, z-along-axis
+    depth_conf: np.ndarray         # (S, H, W)    f32
+    camera: CameraTrack            # (T == S) per-frame pose + intrinsics (mayavius)
+
+
+@dataclass
+class TrackResult:
+    """Lifted 3D tracks (after the §5 step 4 lift) (spec/06 §4.5a)."""
+
+    positions: np.ndarray   # (M, T, 3) f32 world space
+    visibility: np.ndarray  # (M, T)    bool
+    colors: np.ndarray      # (M, 3)    u8
+
+
+def _aabb_over(*arrays: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
+    """AABB (f32 min, max) + diagonal length over all given ``(*,3)`` arrays."""
+    chunks = [np.asarray(a, dtype=np.float32).reshape(-1, 3) for a in arrays if a is not None]
+    chunks = [c for c in chunks if c.size]
+    if not chunks:
+        amin = np.zeros(3, dtype=np.float32)
+        amax = np.ones(3, dtype=np.float32)
+    else:
+        allp = np.concatenate(chunks, axis=0)
+        amin = allp.min(axis=0).astype(np.float32)
+        amax = allp.max(axis=0).astype(np.float32)

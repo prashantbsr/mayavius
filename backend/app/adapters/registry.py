@@ -58,3 +58,30 @@ def _make_open_d4rt(settings):
 def _make_fixture(settings):
     from app.adapters.fixture_adapter import FixtureAdapter  # lazy (no torch anyway)
 
+    return FixtureAdapter(settings)
+
+
+# id -> factory. Each factory imports its adapter class INSIDE the call (spec/06 §4.6),
+# so importing this module pulls in no adapter / no torch.
+_FACTORIES: dict[str, Callable[[object], "ReconstructionPort"]] = {
+    "vggt+cotracker3": _make_vggt_cotracker3,  # default (D1)
+    "vggt": _make_vggt,  # static only
+    "cotracker3": _make_cotracker3,  # tracks only (needs depth source)
+    "spatialtracker_v2": _make_spatialtracker_v2,  # cloud/CUDA
+    "pi3": _make_pi3,  # cloud/CUDA
+    "open_d4rt": _make_open_d4rt,  # optional GPU
+    "fake": _make_fixture,  # fixture mode — NO ML (Waves 1-2 + e2e)
+}
+
+
+def build_adapter(settings) -> "ReconstructionPort":
+    """Resolve ``settings.adapter`` -> a constructed ``ReconstructionPort``.
+
+    Called once at startup (FastAPI lifespan). An unknown id fails fast with a
+    ``RuntimeError`` (spec/06 §2.2: 500 at startup, not at request time).
+    """
+    try:
+        factory = _FACTORIES[settings.adapter]
+    except KeyError:
+        raise RuntimeError("unknown MAYAVIUS_ADAPTER=" + repr(settings.adapter))
+    return factory(settings)

@@ -58,3 +58,33 @@ def _scene():
     cam = CameraTrack(
         poses=np.array([[*q_may, *t_may]], dtype=np.float32),
         intrinsics=np.array([[fx / W, fy / H, cx / W, cy / H]], dtype=np.float32),
+    )
+    K_px = np.array([fx, fy, cx, cy], dtype=np.float32)
+    return cam, depth, K_px, (u, v), p_may_true, R_may, t_may
+
+
+def test_track_lift_recovers_known_mayavius_world_point():
+    cam, depth, K_px, (u, v), p_may_true, _r, _t = _scene()
+    tracks = np.array([[[u, v]]], dtype=np.float32)  # (M=1, T=1, 2)
+    vis = np.array([[True]])
+
+    c2w = _camera_to_opencv_c2w_stack(cam, 1)
+    pos, out_vis = lift_tracks_to_3d(tracks, vis, depth, K_px, c2w)
+
+    assert bool(out_vis[0, 0]) is True
+    np.testing.assert_allclose(pos[0, 0], p_may_true, atol=1e-3)
+
+
+def test_double_flip_path_would_be_wrong():
+    """Teeth: feeding the lift the MAYAVIUS c2w (the old double-flip bug) must NOT
+    recover the true point — proving the round-trip above actually discriminates."""
+    cam, depth, K_px, (u, v), p_may_true, R_may, t_may = _scene()
+    tracks = np.array([[[u, v]]], dtype=np.float32)
+    vis = np.array([[True]])
+
+    bad_c2w = np.zeros((1, 4, 4), dtype=np.float32)
+    bad_c2w[0, :3, :3] = R_may  # mayavius rotation fed where OpenCV is expected
+    bad_c2w[0, :3, 3] = t_may
+    bad_c2w[0, 3, 3] = 1.0
+
+    pos, _ = lift_tracks_to_3d(tracks, vis, depth, K_px, bad_c2w)

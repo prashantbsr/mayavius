@@ -88,3 +88,33 @@ def _aabb_over(*arrays: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
         allp = np.concatenate(chunks, axis=0)
         amin = allp.min(axis=0).astype(np.float32)
         amax = allp.max(axis=0).astype(np.float32)
+    diag = float(np.linalg.norm((amax - amin).astype(np.float32)))
+    return amin, amax, diag
+
+
+def _min_dist_to_set(points: np.ndarray, query: np.ndarray, chunk: int = _DIST_CHUNK) -> np.ndarray:
+    """Min Euclidean distance from each ``points[i]`` to the nearest ``query`` point.
+
+    Brute-force chunked ``(N, M)`` distances (no scipy). ``points`` is ``(N,3)``,
+    ``query`` is ``(M,3)``; returns ``(N,)`` float32. Empty ``query`` → all ``inf``.
+    """
+    n = points.shape[0]
+    if n == 0:
+        return np.empty((0,), dtype=np.float32)
+    if query.shape[0] == 0:
+        return np.full((n,), np.inf, dtype=np.float32)
+    q = query.astype(np.float32)
+    out = np.empty((n,), dtype=np.float32)
+    for lo in range(0, n, chunk):
+        hi = min(n, lo + chunk)
+        blk = points[lo:hi].astype(np.float32)            # (b,3)
+        d2 = ((blk[:, None, :] - q[None, :, :]) ** 2).sum(axis=2)  # (b,M)
+        out[lo:hi] = np.sqrt(d2.min(axis=1)).astype(np.float32)
+    return out
+
+
+def _moving_track_samples(
+    tr: TrackResult, motion_thresh_pct: float, net_floor: float
+) -> np.ndarray:
+    """World positions of the samples of tracks that genuinely MOVE (dynamic seeds).
+

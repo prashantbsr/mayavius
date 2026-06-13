@@ -148,3 +148,33 @@ export function TrackRibbons({ scene }: { scene: Mv4dScene }) {
         if (!seen.has(mat)) {
           seen.add(mat);
           mat.dispose();
+        }
+      }
+    },
+    [group],
+  );
+
+  useFrame((state) => {
+    const g = groupRef.current;
+    if (!g) return;
+
+    // Keep LineMaterial.resolution in sync with the canvas (px widths). Only
+    // re-set on an actual size change — the material list is small but shared.
+    const w = state.size.width;
+    const h = state.size.height;
+    if (w !== lastW.current || h !== lastH.current) {
+      lastW.current = w;
+      lastH.current = h;
+      for (const child of g.children) {
+        (child as Line2).material.resolution.set(w, h);
+      }
+    }
+
+    const { time, frameCount } = useViewerStore.getState();
+    const t = timeToFrame(time, frameCount);
+    if (t === lastFrame.current) return;
+    lastFrame.current = t;
+    for (const child of g.children) {
+      const line = child as Line2;
+      const meta = line.userData as RunMeta;
+      // Segment i connects frame (startFrame+i) → (startFrame+i+1); it is drawn

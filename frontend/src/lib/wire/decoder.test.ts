@@ -298,3 +298,15 @@ describe("MV4D decoder — golden conformance (T-202)", () => {
 
     // ---- cameras (exact f32) ----
     const cam = scene.cameras!;
+    expected.cameras.poses.forEach((pose, t) => {
+      for (let k = 0; k < 7; k++) {
+        expect(cam.poses[t * 7 + k]).toBeCloseTo(pose[k], 5);
+      }
+    });
+    expected.cameras.intrinsics.forEach((intr, t) => {
+      for (let k = 0; k < 4; k++) {
+        expect(cam.intrinsics[t * 4 + k]).toBeCloseTo(intr[k], 5);
+      }
+    });
+  });
+});

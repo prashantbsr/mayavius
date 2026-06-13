@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Mv4dScene } from "@/types";
 
 // Playback + interaction state for the viewer.
 //

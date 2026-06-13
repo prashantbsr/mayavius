@@ -165,3 +165,134 @@ model: `POST /jobs` (202) → `GET /jobs/{id}` (status + `0..1` progress) →
 
 ---
 
+## 4. End-to-end tests (Playwright)
+
+`@playwright/test` drives a real browser against `next dev` (or `next start` on the
+built app) + the FastAPI backend. Default project = **Chromium**; a WebKit project
+runs the smoke path (T-400) to catch Safari/WebGL2 differences. The e2e backend
+runs with **`MAYAVIUS_ADAPTER=fake`** → the production `FixtureAdapter`
+([06 §4.6](06-backend-spec.md), registry id `fake`) that returns a deterministic
+`Scene4D` from the committed golden/example MV4D instantly, so e2e needs **no torch
+and no GPU**; the real model path is exercised only by §5.
+
+**`playwright.config.ts` `webServer` (the exact e2e bootstrap — W0.T4 writes this):**
+two servers, both auto-started; the lifespan auto-seeds `assets/samples/example.mv4d`
+(W2.T5) so `/view/example` is live before the suite runs.
+```ts
+webServer: [
+  { command: "cd ../backend && MAYAVIUS_ADAPTER=fake ./.venv/bin/python -m uvicorn app.main:app --port 8000",
+    url: "http://localhost:8000/health", reuseExistingServer: !process.env.CI, timeout: 120_000 },
+  { command: "npm run dev",
+    url: "http://localhost:3000", reuseExistingServer: !process.env.CI,
+    env: { NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000", NEXT_PUBLIC_SITE_URL: "http://localhost:3000" } },
+],
+use: { baseURL: "http://localhost:3000" },
+```
+(Playwright cwd is `frontend/`, so the backend command `cd ../backend` reaches the
+venv. CI installs ML deps? No — fixture mode needs none.)
+
+| id | test | flow / asserts |
+|----|------|----------------|
+| **T-400** | `landing.loads` | `GET /` (static landing, indexable) renders; the hero + an example gallery are present; `<canvas>` is **not** required yet (viewer is client-only, lazy). |
+| **T-401** | `example.reconstructs` | Click the **seeded preloaded example** → viewer mounts; a `THREE.Points` cloud appears: assert `window.__mayaviusDebug.staticPointCount > 0` (the test-observability contract, [07 §4.4](07-frontend-spec.md)). The static background is visible. |
+| **T-402** | `upload.flow` | Upload the bundled e2e fixture clip **`frontend/e2e/fixtures/tiny.mp4`** (W2.T5; a few-KB CC0 `video/*` clip — bytes ignored in fixture mode, but POST /jobs validates content-type+size first, so a real video file must exist at the W2 gate) → result loads → cloud appears. **No wall-clock race (mirror T-303's framing, no artificial delay):** assert the terminal reveal (`window.__mayaviusDebug.staticPointCount > 0`) **and** that the store observed at least one progress value `0 < p < 1` (assert against the `viewerStore.progress` field captured over the run, **not** a guaranteed mid-flight DOM frame). Deterministic + fast (fixture backend). The full §6 corpus is used by T-510, not here. |
+| **T-403** | `timeline.scrub` | Drag the timeline scrubber → `viewerStore.time` changes across `[0,1]`; the rendered dynamic frame changes — assert `window.__mayaviusDebug.frameIndex` updates ([07 §4.4](07-frontend-spec.md)); the moving cluster moves over the stable background. |
+| **T-404** | `playback.toggle` | Click play → `isPlaying=true`, time advances on the R3F loop; click again → pauses; toggle loop → playback wraps at `time=1→0` when `loop=true`. |
+| **T-405** | `bullet_time.orbit` | Enter bullet-time (freeze) → `frozen=true`, playback halts; orbit drag rotates the camera around the frozen frame — assert `window.__mayaviusDebug.cameraQuaternion` changes while `window.__mayaviusDebug.frameIndex` is constant ([07 §4.4](07-frontend-spec.md)). |
+| **T-406** | `share.link` | Copy the share link from `/view/[id]`, reload that URL in a fresh context → the **same** result loads; `generateMetadata` produced the share-card `<meta og:*>` tags (assert in the document head — the virality surface). `params` is awaited (Next 16 async params). |
+| **T-407** | `ssr_boundary` | The viewer route renders server-side without throwing (no `window` access at SSR); the `<canvas>` only appears after hydration (confirms `ViewerClient` `dynamic(..., {ssr:false})` boundary — `ssr:false` is forbidden in Server Components in Next 16). |
+
+---
+
+## 5. The 36 GB-Mac MPS smoke test (the on-device gate)
+
+**Purpose:** prove the real default combo runs on the target hardware and
+**record** its cost — this is the project's hard constraint made testable. It is
+the **only** test that needs `requirements-ml.txt` + multi-GB weights, so it is
+**opt-in** and skipped everywhere it can't run.
+
+- **File:** `backend/tests/mps/test_mps_smoke.py`, marked `@pytest.mark.mps`.
+- **Skip logic:** skip unless `torch.backends.mps.is_available()` **and**
+  `MAYAVIUS_RUN_MPS_SMOKE=1`; skip reason states why (no MPS / opt-in flag off).
+  Never runs in default `pytest` or default CI.
+- **Env:** the adapter sets `PYTORCH_ENABLE_MPS_FALLBACK=1` **before importing
+  torch** ([08 §5](08-dependencies-and-env.md)); device `mps`, dtype **fp32**
+  (no fp16 autocast — by choice, the VGGT MPS port pattern, C3).
+
+| id | test | asserts / records |
+|----|------|-------------------|
+| **T-500** | `test_mps_available` | `torch.backends.mps.is_available()` is `True`; torch ≥ `2.5.0` (floor) — else skip. |
+| **T-510** | **`test_vggt_cotracker3_smoke`** | Run `VggtAdapter` + `CoTracker3Adapter` (lift 2D→3D via VGGT depth) on **one bundled ≤3 s sample clip** (§6). Assert: completes without raising; returns a valid `Scene4D` that **encodes to MV4D within caps** (chains T-100/T-104); has ≥1 static point and ≥1 track. **Measure & record** wall-time (`time.perf_counter`) and peak memory (`torch.mps.driver_allocated_memory()` / `current_allocated_memory()`), **print to the test report** (e.g. `mps_smoke: 41.2s wall, 9.7 GB peak` on a 36 GB Mac). **Do NOT pre-assert a GB threshold** — the numbers are *outputs*, recorded for spec/08 §5 and the README, not gates (decision-log §E,H). |
+| **T-511** | `test_mps_fallback_documented` | If an op falls back to CPU under `PYTORCH_ENABLE_MPS_FALLBACK=1`, the adapter **logs which op** (a warning capturable by `caplog`); the test records the fallback list. If an op fails *even with* fallback, the test fails with a message pointing at the cloud-GPU path (spec/11) — this is how a missing-op dead end gets documented, not rediscovered. |
+
+> **Negative knowledge baked in:** there is **no** MPS smoke test for
+> `Pi3Adapter`/`SpatialTrackerV2Adapter`/`OpenD4RTAdapter` — they have no Mac path
+> (decision-log §D/E). Their on-device coverage is **explicitly out of scope** and
+> belongs to the optional cloud-GPU deploy (spec/11). Writing a Mac MPS test for
+> them would be rediscovering a known dead end.
+
+---
+
+## 6. Sample-video corpus (D10)
+
+3–4 short (**≤ 3 s**), CC-licensed clips bundled as **preloaded examples** and as
+the fixtures for T-402 / T-510. They are committed under **`assets/samples/`** at
+the repo root (small, re-encoded to ≤ 3 s / ≤ 540p / ≤ ~2 MB each) — **not** model
+weights, so the [08 §8](08-dependencies-and-env.md) no-commit rule does not apply;
+binary sample videos *beyond this curated corpus* are gitignored. Each ships a
+sidecar `assets/samples/<name>.json` with `{ source_url, license, attribution,
+duration_s, expected }`.
+
+**Exact `.gitignore` stanza** (add to root `.gitignore` in W4.T1 — broad ignore
+first, then un-ignore the corpus dir, then its video files; order matters):
+```gitignore
+# --- Sample videos: commit ONLY the curated corpus under assets/samples/ ---
+*.mp4
+*.mov
+*.webm
+!assets/samples/
+!assets/samples/*.mp4
+!assets/samples/*.mov
+!assets/samples/*.webm
+# the committed e2e upload fixture (W2.T5 / T-402) — un-ignore the dir before the file
+!frontend/e2e/fixtures/
+!frontend/e2e/fixtures/*.mp4
+```
+> **Note:** `frontend/e2e/fixtures/tiny.mp4` (T-402's upload) would otherwise be
+> caught by the broad `*.mp4` rule — the two un-ignore lines above are **required**
+> or `git add` silently drops it and the W2 gate is unreachable on a fresh clone.
+This makes DoD §9.4 (`git ls-files | grep -Ei '\.(mp4|mov|webm)$'` ⊆ corpus) true
+and lets T-600 commit the corpus. (The pre-baked `assets/samples/<slug>.mv4d`
+result blobs are not video and are committable as-is; the committed golden test
+fixture lives under `backend/tests/fixtures/`.)
+
+> **Sourcing rule (verify, don't assume):** the executor MUST pull each clip from a
+> CC-BY / CC0 / public-domain source (e.g. Pexels/Pixabay CC0, Wikimedia Commons
+> CC-BY, or self-recorded MIT-released), **record the exact URL + license + author
+> in the sidecar**, and re-encode to the cap. Do not commit a clip whose license is
+> unverified. The names/roles below are fixed; the specific URLs are filled at build
+> time and logged.
+
+Each clip's **`name` is its slug**: the files are `assets/samples/<name>.{mp4,json,mv4d}`,
+the route is `/view/<name>`, and the lifespan seeds the `.mv4d` under that id
+([06 §6](06-backend-spec.md)). The four corpus slugs are `walking-person`,
+`street-vehicle`, `pet-motion`, `static-scene`. **W2** additionally ships the slug
+**`example`** (`assets/samples/example.mv4d`, the fixture example wired into the W2
+gallery before the corpus exists).
+
+| id | name (role) | content | license target | expected qualitative result |
+|----|-------------|---------|----------------|------------------------------|
+| **C-1** | `walking-person` (the hero) | one person walking across a fairly static scene | CC0 / CC-BY | moving subject animates as a **colored point cluster trailing ribbons** over a **stable background** cloud; tracks follow the limbs/torso. |
+| **C-2** | `street-vehicle` | a car/bike moving across frame | CC0 / CC-BY | the vehicle is a coherent moving point cluster with smooth track ribbons; parked cars + buildings stay in the static cloud. |
+| **C-3** | `pet-motion` | a dog/cat moving, handheld camera | CC0 / CC-BY | non-rigid moving subject animates; camera motion is absorbed into the per-frame `CameraTrack` (background stays put under orbit). |
+| **C-4** | `static-scene` (the control) | near-static scene, minor camera pan | CC0 / CC-BY | almost everything lands in the **static cloud**; **few/no** dynamic points or ribbons. The negative control — proves the static/dynamic split doesn't hallucinate motion. |
+
+Corpus acceptance:
+
+| id | test | asserts |
+|----|------|---------|
+| **T-600** | `test_corpus_present_and_licensed` (pytest) | Each of C-1..C-4 exists in `assets/samples/`, is ≤ 3 s and ≤ the size cap, and has a sidecar JSON with a non-empty `license` + `source_url` (license discipline is testable, not trust-based). |
+| **T-601** | `corpus.examples_listed` (vitest/e2e) | The landing example gallery lists the corpus clips; clicking each is wired to a result (chains T-401). |
+
+---
+

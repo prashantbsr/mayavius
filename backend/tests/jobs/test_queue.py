@@ -118,3 +118,33 @@ def test_events_on_finished_job_yields_terminal_event(tmp_path):
     """events() on an already-finished job yields a single terminal event and returns."""
     queue = _make_queue(tmp_path)
 
+    async def scenario() -> list:
+        job_id = await queue.submit("/tmp/clip.mp4", _request())
+        await _drive_to_terminal(queue, job_id)
+        collected = []
+        async for event in queue.events(job_id):
+            collected.append(event)
+        return collected
+
+    events = asyncio.new_event_loop().run_until_complete(scenario())
+
+    # Already terminal → emit once + return (no queue wait, no hang).
+    assert len(events) == 1
+    assert events[0].event == JobStatus.DONE.value
+    assert events[0].data["status"] == "done"
+    assert events[0].data["result"] == f"/jobs/{events[0].data['id']}/result"
+
+
+def test_events_streams_through_to_terminal(tmp_path):
+    """events() on a still-queued job streams running frames and ends on a terminal one."""
+    queue = _make_queue(tmp_path)
+
+    async def scenario() -> list:
+        job_id = await queue.submit("/tmp/clip.mp4", _request())
+        # Subscribe BEFORE the worker finishes (the first yield is the current state).
+        collected = []
+        async for event in queue.events(job_id):
+            collected.append(event)
+        return collected
+
+    events = asyncio.new_event_loop().run_until_complete(scenario())

@@ -328,3 +328,33 @@ class _EmptyAdapter(ReconstructionPort):
             mps_capable=True,
             weights_license="none",
             default_weights="(empty)",
+        )
+
+    def reconstruct(self, request, progress: ProgressSink | None = None) -> Scene4D:
+        # All static points have conf below the default 0.5 threshold -> culled to zero
+        # in smooth_and_cull; no tracks. The service's emptiness guard then raises.
+        return Scene4D(
+            frame_count=2,
+            fps=24.0,
+            aabb_min=np.zeros(3, dtype=np.float32),
+            aabb_max=np.ones(3, dtype=np.float32),
+            static_positions=np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]], dtype=np.float32),
+            static_colors=np.array([[10, 10, 10], [20, 20, 20]], dtype=np.uint8),
+            static_conf=np.array([1, 2], dtype=np.uint8),  # 1/255, 2/255 < 0.5 -> all culled
+            dynamic_positions=[np.zeros((0, 3), dtype=np.float32) for _ in range(2)],
+            dynamic_colors=[np.zeros((0, 3), dtype=np.uint8) for _ in range(2)],
+            tracks=None,
+            cameras=None,
+        )
+
+
+def test_empty_reconstruction_is_the_only_encode_path_raise() -> None:
+    """T-104 — a scene culled to zero static AND no tracks raises EmptyReconstructionError via run()."""
+    service = ReconstructionService(_EmptyAdapter())
+    request = ReconstructionRequest(video_path="/tmp/fake.mp4", max_frames=24, target_fps=12.0)
+
+    try:
+        service.run(request)
+    except EmptyReconstructionError as exc:
+        assert exc.code == "empty_reconstruction"
+    else:  # pragma: no cover - the guard must fire

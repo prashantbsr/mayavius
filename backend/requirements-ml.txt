@@ -1,0 +1,16 @@
+# DEFERRED — heavy ML dependencies. NOT installed during scaffolding (multi-GB).
+#
+# Exact versions, Apple-Silicon/MPS notes and model repo IDs are RE-VERIFIED and
+# pinned in spec/08-dependencies-and-env.md BEFORE anything here is installed.
+# The model-selection task (handover §6) locks the default adapter combo first.
+#
+# Likely baseline (UNPINNED placeholders — do NOT install until verified):
+#   torch            # PyTorch with MPS backend on Apple Silicon; fp32 only (no fp16 autocast on MPS)
+#   torchvision
+#   numpy
+#   opencv-python    # video decode / frame extraction
+#   huggingface-hub  # pull model weights (e.g. VGGT-1B-Commercial)
+#   einops
+#
+# Model-specific deps (vggt / cotracker3 / spatialtracker_v2) are added per the
+# selected adapter(s) in spec/08-dependencies-and-env.md.

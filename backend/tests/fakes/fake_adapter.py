@@ -88,3 +88,25 @@ class FakeAdapter(ReconstructionPort):
                 [
                     [1.2, 1.2, 0.5, 0.5],
                     [1.2, 1.2, 0.5, 0.5],
+                    [1.2, 1.2, 0.5, 0.5],
+                ],
+                dtype=np.float32,
+            ),
+        )
+
+        aabb_min = np.array([0, 0, 0], dtype=np.float32)
+        aabb_max = np.array([1, 1, 0.9], dtype=np.float32)
+
+        return Scene4D(
+            frame_count=3,
+            fps=24.0,
+            aabb_min=aabb_min,
+            aabb_max=aabb_max,
+            static_positions=static_positions,
+            static_colors=static_colors,
+            static_conf=static_conf,
+            dynamic_positions=dynamic_positions,
+            dynamic_colors=dynamic_colors,
+            tracks=tracks,
+            cameras=cameras,
+        )

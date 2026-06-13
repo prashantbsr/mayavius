@@ -118,3 +118,33 @@ export function PointCloud({
     if (!obj) return;
     const material = obj.material as THREE.ShaderMaterial;
     // Keep perspective sizing in sync with the live canvas height (cheap write).
+    material.uniforms.uViewportHeight.value = state.size.height;
+
+    if (layer !== "dynamic") return;
+    const { time, frameCount } = useViewerStore.getState();
+    const t = timeToFrame(time, frameCount);
+    if (t === lastFrame.current) return;
+    lastFrame.current = t;
+
+    const frame = scene.dynamic?.frames[t];
+    const count = frame ? frame.count : 0;
+    const geom = obj.geometry;
+    if (count === 0) {
+      geom.setDrawRange(0, 0); // a frame with no moving points draws nothing
+      return;
+    }
+    // Copy this frame's decoder views into the fixed-capacity prefix and flag
+    // the changed range for re-upload — no per-frame BufferGeometry allocation.
+    const cnt3 = count * 3;
+    const posAttr = geom.getAttribute("position") as THREE.BufferAttribute;
+    const colAttr = geom.getAttribute("color") as THREE.BufferAttribute;
+    (posAttr.array as Uint16Array).set(frame!.positionsQ.subarray(0, cnt3));
+    (colAttr.array as Uint8Array).set(frame!.colors.subarray(0, cnt3));
+    posAttr.needsUpdate = true;
+    colAttr.needsUpdate = true;
+    geom.setDrawRange(0, count);
+  });
+
+  if (!points) return null;
+  return <primitive object={points} ref={pointsRef} />;
+}

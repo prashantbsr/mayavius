@@ -61,3 +61,64 @@ of speed/simplicity" decision downstream.
 
 ---
 
+## 4. Success metrics
+
+### 4.1 Star-oriented (the product *is* its distribution)
+
+| Metric | Target | Verified by |
+|--------|--------|-------------|
+| Hosted live demo reachable, no install | up at a public URL (HF Space, dedicated GPU — D9) | [11](11-deployment-and-launch.md) |
+| Preloaded examples on the landing page | **3–4** short CC-licensed clips, one-click to a result | [10](10-testing-strategy.md) corpus, [11](11-deployment-and-launch.md) |
+| Shareable result URLs with rich cards | `/view/[id]` resolves for a logged-out stranger; share card renders (OG/Twitter) | [07](07-frontend-spec.md) `generateMetadata` |
+| README GIF | a looping orbit/bullet-time GIF, above the fold | [10](10-testing-strategy.md) |
+| Honest licensing in the open repo | MIT code badge; active model `weights_license` surfaced in README + `/jobs` metadata | [08 §7](08-dependencies-and-env.md) (D2) |
+
+### 4.2 Technical (the bar that makes the stars-play credible)
+
+| Metric | Target | Measured |
+|--------|--------|----------|
+| **Result load** (blob fetch + decode → first painted cloud) | **≤ ~2 s** for an in-caps payload (≤12MB target), vs ~40s if JSON. | MV4D zero-copy decode; brotli/gzip + immutable cache ([05](05-data-contract.md)) |
+| **Zero-cloud E2E** | upload → reconstruct → interactive playback, entirely on the 36GB Mac (MPS, fp32). | [10](10-testing-strategy.md) acceptance gate |
+| **Time-to-first-cloud** | static `THREE.Points` painted as soon as STATIC_POINTS arrives — *before* dynamic/tracks finish (progressive, not behind a spinner). | section-directory + static-first decode ([05 §1](05-data-contract.md)); SSE progress ([06](06-backend-spec.md)) |
+| **Payload size** | uncompressed ≤ **12MB** target (24MB hard ceiling); encoder logs actual. | [05 §4 caps](05-data-contract.md) |
+| **Interactive frame rate** | smooth orbit/scrub on the target Mac and a typical laptop GPU (16-bit positions dequantized in-shader; no per-point CPU copy). | Path-1 shader ([07](07-frontend-spec.md)) |
+
+> **Note — peak-memory numbers are deliberately NOT asserted here.** VGGT-on-MPS
+> per-frame GB is *measured* on the actual 36GB Mac during the build (the
+> "7GB/8GB" figures circulating online are unverified). Repo-confirmed floor:
+> VGGT runs on an 8GB+ Mac; 36GB is ample for short clips. See
+> [decision-log §E/§H](decisions/decision-log.md).
+
+---
+
+## 5. Target users
+
+| User | Arrives via | Wants | We give them |
+|------|-------------|-------|--------------|
+| **The "drop in your own video" stranger** | a shared link / the README GIF / HN | the wow with **zero setup** | the hosted demo: upload → 4D in seconds → orbit/scrub/bullet-time → their own shareable `/view/[id]`. No GPU, no install. |
+| **The dev who runs it locally** | the GitHub repo (stars) | clone → `make setup` → `make dev-backend` + `make dev-frontend` → it works on *their* Mac, and the model layer is obviously swappable | a clean hexagonal backend (`ReconstructionPort` + adapters), the MV4D contract, and an MPS path that runs with **no cloud GPU**. |
+
+Both users are first-class. The stranger drives **stars-through-shares**; the dev
+drives **stars-through-cloning** and is the audience for the architecture's
+legibility (the swappable-adapter story is the extensibility pitch).
+
+---
+
+## 6. Citation note (handover §8 — documented future direction, NOT MVP scope)
+
+Be explicit: **mayavius is primarily a *stars* play and is weak on *citations*
+standalone.** It is a viewer + pipeline + wire format, not a novel model — there
+is little for an academic paper to cite in the MVP itself.
+
+The path to citations is **to ship mayavius as the frontend of a *citable
+backend***: a future open, D4RT-style feedforward 4D decoder ("**OpenD4RT**").
+The architecture already reserves the seam — `OpenD4RTAdapter` is a placeholder
+adapter behind `ReconstructionPort`, and an unofficial open reimplementation now
+exists to wrap (`Lijiaxin0111/Open-d4rt`, Apache-2.0; official Google DeepMind
+D4RT remains unreleased — [decision-log §F](decisions/decision-log.md)). Standing
+up a trained, benchmarkable OpenD4RT decoder *behind* mayavius is what would make
+the combined system citable.
+
+**This is a documented future direction, not MVP scope.** The MVP ships the
+viewer + the default VGGT + CoTracker3 adapter combo (D1) and optimizes for
+stars. Do not build OpenD4RT in the MVP — only keep its adapter seam intact.

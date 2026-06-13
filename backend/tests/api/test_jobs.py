@@ -58,3 +58,33 @@ def test_job_submit_returns_id(client) -> None:
 def test_job_lifecycle_poll(client) -> None:
     job_id = client.post("/jobs", files=_multipart()).json()["job_id"]
     observed = _poll_until_terminal(client, job_id)
+
+    statuses = {b["status"] for b in observed}
+    assert statuses <= {"queued", "running", "done"}, statuses
+
+    # progress monotonically non-decreasing in [0, 1], ending at 1.0.
+    progresses = [b["progress"] for b in observed]
+    for p in progresses:
+        assert 0.0 <= p <= 1.0
+    for a, b in zip(progresses, progresses[1:]):
+        assert b >= a, progresses
+    assert progresses[-1] == 1.0
+
+    terminal = observed[-1]
+    assert terminal["status"] == "done"
+    assert terminal["weights_license"], terminal
+    assert terminal["adapter_id"], terminal
+
+
+# --- T-304 ---------------------------------------------------------------------
+def test_job_result_is_mv4d(client) -> None:
+    job_id = client.post("/jobs", files=_multipart()).json()["job_id"]
+    _poll_until_terminal(client, job_id)
+
+    r = client.get(f"/jobs/{job_id}/result")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/octet-stream"
+    assert r.content[:4] == b"MV4D"
+    assert "immutable" in r.headers["cache-control"]
+
+    scene = decode(r.content)  # chains T-100

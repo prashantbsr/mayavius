@@ -58,3 +58,33 @@ def test_golden_fixture_is_canonical():
         f"longer matches the committed fixture (regenerated {len(regenerated)} B "
         f"vs on-disk {len(on_disk)} B). Update the fixture AND decoder.ts in the "
         "same commit (spec/05 §7)."
+    )
+    # The fixture is a committable binary asset, not a model weight (spec/10 §2):
+    # keep it small enough to stay a cheap, shareable test artifact.
+    assert len(on_disk) < 4096, f"golden fixture must be <4KB, got {len(on_disk)}"
+
+
+# --------------------------------------------------------------------------- #
+# T-203 — reverse conformance: hand-laid TS-style vector decodes in Python
+# --------------------------------------------------------------------------- #
+def test_reverse_conformance_tiny_vector():
+    """T-203: the hand-laid tiny.mv4d (spec/05 §6) decodes correctly in Python.
+
+    The vector is built byte-by-byte INDEPENDENT of ``encode_reconstruction``
+    (spec/10 §2 permits hand-laid bytes), so this guards the reverse decode
+    direction — a future client/TS encoder writing this exact layout must be
+    decodable here.
+    """
+    assert _TINY_PATH.exists(), (
+        f"missing committed tiny reverse vector: {_TINY_PATH} "
+        "(regenerate via tests.wire._gen_fixtures)"
+    )
+    raw = _TINY_PATH.read_bytes()
+    assert len(raw) == 98, f"tiny.mv4d must be exactly 98 bytes, got {len(raw)}"
+
+    scene = decode(raw)
+
+    # T == 2, two frames each with exactly one dynamic point.
+    assert scene.frame_count == 2
+    assert [f.shape[0] for f in scene.dynamic_positions] == [1, 1]
+

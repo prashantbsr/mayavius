@@ -118,3 +118,33 @@ describe("MV4D decoder — dynamic slicing (T-151)", () => {
   });
 });
 
+describe("MV4D decoder — tracks visibility (T-152)", () => {
+  it("isVisible(m,t) matches the packed LSB-first bitmask; colors present", () => {
+    const buffer = readArrayBuffer(GOLDEN_PATH);
+    const scene = decodeReconstruction(buffer);
+
+    expect(scene.tracks).toBeDefined();
+    const tr = scene.tracks!;
+    expect(tr.count).toBe(expected.tracks.count);
+
+    expected.tracks.visibility.forEach((row, m) => {
+      row.forEach((vis, t) => {
+        expect(tr.isVisible(m, t)).toBe(vis);
+      });
+    });
+
+    // HAS_TRACK_COLOR is set in the golden fixture → colors present + exact.
+    expect(tr.colors).toBeDefined();
+    expect(tr.colors!.buffer).toBe(buffer);
+    expected.tracks.colors.forEach((c, m) => {
+      expect(tr.colors![m * 3 + 0]).toBe(c[0]);
+      expect(tr.colors![m * 3 + 1]).toBe(c[1]);
+      expect(tr.colors![m * 3 + 2]).toBe(c[2]);
+    });
+  });
+});
+
+describe("MV4D decoder — error contract (T-153, T-154)", () => {
+  it("bad magic throws typed Mv4dDecodeError (not a generic Error) — T-153", () => {
+    const buffer = readArrayBuffer(GOLDEN_PATH);
+    new Uint8Array(buffer)[0] = 0x00; // corrupt the magic

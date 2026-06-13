@@ -58,3 +58,33 @@ export function CameraRig({
     const [maxX, maxY, maxZ] = scene.aabbMax;
 
     const center = centerRef.current.set(
+      (minX + maxX) / 2,
+      (minY + maxY) / 2,
+      (minZ + maxZ) / 2,
+    );
+    const diag = tmpVec.current.set(maxX - minX, maxY - minY, maxZ - minZ);
+    const radius = 0.5 * diag.length();
+
+    const fovYRad = THREE.MathUtils.degToRad(FIT_FOV_Y_DEG);
+    // Degenerate AABB (radius 0) → keep a sane non-zero distance so the camera
+    // doesn't collapse onto the center.
+    const distance =
+      radius > 0 ? (radius / Math.sin(0.5 * fovYRad)) * FIT_PADDING : 1;
+
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.fov = FIT_FOV_Y_DEG;
+      camera.updateProjectionMatrix();
+    }
+    camera.position.copy(center).addScaledVector(FIT_DIR, distance);
+    camera.lookAt(center);
+
+    // Point OrbitControls at the same target so the first drag orbits the cloud.
+    const controls = controlsRef.current;
+    if (controls) {
+      controls.target.copy(center);
+      controls.update();
+    }
+    // Re-run only when a new scene is loaded. `scene` is the meaningful trigger.
+  }, [scene, getR3f, controlsRef]);
+
+  // ── 2. Per-frame camera-mode handling. ───────────────────────────────────────

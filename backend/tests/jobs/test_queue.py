@@ -298,3 +298,33 @@ def test_progress_closure_pushes_running_events(tmp_path):
                 progress(0.60, "beta")
             return Scene4D(
                 frame_count=1,
+                fps=24.0,
+                aabb_min=np.zeros(3, dtype=np.float32),
+                aabb_max=np.ones(3, dtype=np.float32),
+                static_positions=np.array([[0, 0, 0]], dtype=np.float32),
+                static_colors=np.array([[1, 2, 3]], dtype=np.uint8),
+                static_conf=np.array([255], dtype=np.uint8),
+                dynamic_positions=[np.zeros((0, 3), dtype=np.float32)],
+                dynamic_colors=[np.zeros((0, 3), dtype=np.uint8)],
+                tracks=Tracks(
+                    positions=np.array([[[0.1, 0.1, 0.1]]], dtype=np.float32),
+                    visibility=np.array([[True]], dtype=bool),
+                    colors=np.array([[9, 9, 9]], dtype=np.uint8),
+                ),
+                cameras=CameraTrack(
+                    poses=np.array([[0, 0, 0, 1, 0, 0, 0]], dtype=np.float32),
+                    intrinsics=np.array([[1, 1, 0.5, 0.5]], dtype=np.float32),
+                ),
+            )
+
+    queue = _make_queue(tmp_path, adapter=_ProgressAdapter())
+
+    async def scenario() -> list:
+        job_id = await queue.submit("/tmp/clip.mp4", _request())
+        collected = []
+        async for event in queue.events(job_id):
+            collected.append(event)
+        return collected
+
+    events = asyncio.new_event_loop().run_until_complete(scenario())
+

@@ -28,3 +28,6 @@ export function BulletTimeButton() {
       }`}
     >
       {frozen ? "Exit bullet-time" : "Bullet-time"}
+    </button>
+  );
+}

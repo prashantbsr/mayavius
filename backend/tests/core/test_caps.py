@@ -298,3 +298,33 @@ def test_no_separate_oversize_exception_path() -> None:
     Statically confirm the service/encoder modules carry no size-ceiling raise, and
     that the single raise in the service is ``EmptyReconstructionError``.
     """
+    source = inspect.getsource(svc_mod)
+    raises = [
+        line.strip()
+        for line in source.splitlines()
+        if line.strip().startswith("raise ")
+    ]
+    # The service raises exactly one error type on the encode path: EmptyReconstructionError.
+    assert raises == ["raise EmptyReconstructionError(\"no usable points after culling\")"]
+
+    # No payload-size / ">24 MB" ceiling exception anywhere in the cap/encode module.
+    lowered = source.lower()
+    assert "24" not in lowered or "mb" not in lowered  # no "24 MB" ceiling clause
+    for needle in ("too large", "exceeds", "ceiling", "payload too"):
+        assert needle not in lowered
+
+
+class _EmptyAdapter(ReconstructionPort):
+    """Adapter whose Scene4D culls to ZERO static AND no tracks (drives the empty guard)."""
+
+    name = "empty"
+
+    @property
+    def info(self) -> AdapterInfo:
+        return AdapterInfo(
+            name="empty",
+            produces_tracks=False,
+            dynamic=False,
+            mps_capable=True,
+            weights_license="none",
+            default_weights="(empty)",

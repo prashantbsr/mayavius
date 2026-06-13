@@ -88,3 +88,33 @@ def test_fake_adapter_satisfies_port() -> None:
 
     # Tracks section: (M, T, 3) f32 positions, (M, T) bool visibility, (M, 3) u8 colors.
     assert isinstance(scene.tracks, Tracks)
+    M = scene.tracks.positions.shape[0]
+    assert M >= 2
+    assert scene.tracks.positions.shape == (M, T, 3)
+    assert scene.tracks.positions.dtype == np.float32
+    assert scene.tracks.visibility.shape == (M, T)
+    assert scene.tracks.visibility.dtype == bool
+    # Mixed visibility (not all visible, not all hidden).
+    assert scene.tracks.visibility.any() and not scene.tracks.visibility.all()
+    assert scene.tracks.colors is not None
+    assert scene.tracks.colors.shape == (M, 3)
+    assert scene.tracks.colors.dtype == np.uint8
+
+    # Cameras section: (T, 7) poses, (T, 4) intrinsics, f32.
+    assert scene.cameras is not None
+    assert scene.cameras.poses.shape == (T, 7)
+    assert scene.cameras.poses.dtype == np.float32
+    assert scene.cameras.intrinsics.shape == (T, 4)
+    assert scene.cameras.intrinsics.dtype == np.float32
+
+    # AABB spans all positions.
+    all_pts = [scene.static_positions]
+    all_pts += [p for p in scene.dynamic_positions if p.shape[0] > 0]
+    all_pts.append(scene.tracks.positions.reshape(-1, 3))
+    stacked = np.concatenate(all_pts, axis=0)
+    assert np.all(scene.aabb_min <= stacked.min(axis=0) + 1e-6)
+    assert np.all(scene.aabb_max >= stacked.max(axis=0) - 1e-6)
+
+
+def test_adapter_license_tag_surfaced() -> None:
+    """T-122 — the adapter's weights_license is a known non-empty tag, surfaced on the scene."""

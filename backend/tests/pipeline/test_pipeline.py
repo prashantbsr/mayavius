@@ -58,3 +58,33 @@ def test_lift_unprojects_with_identity_camera_and_axis_flip() -> None:
     visibility = np.array([[True]], dtype=bool)
     intrinsics = np.array([fx, fy, cx, cy], dtype=np.float32)  # (4,) broadcast
     c2w = np.eye(4, dtype=np.float32)                          # identity
+
+    positions, vis_out = lift_tracks_to_3d(tracks_2d, visibility, depth, intrinsics, c2w)
+
+    x_cam = (u - cx) * D / fx
+    y_cam = (v - cy) * D / fy
+    z_cam = D
+    expected = np.array([x_cam, -y_cam, -z_cam], dtype=np.float32)  # F flip
+
+    assert vis_out[0, 0]
+    assert np.allclose(positions[0, 0], expected, atol=1e-5), (positions[0, 0], expected)
+
+
+def test_lift_axis_flip_is_diag_1_neg1_neg1_under_rotated_camera() -> None:
+    """With a non-trivial c2w the flip + cam->world compose correctly.
+
+    Build c2w with a known rotation R and translation t; verify
+    p_may = F · (R · p_cam + t).
+    """
+    H, W = 30, 30
+    fx = fy = 25.0
+    cx = cy = 15.0
+    u, v, D = 20.0, 10.0, 3.0
+
+    depth = np.zeros((1, H, W), dtype=np.float32)
+    depth[0, int(round(v)), int(round(u))] = D
+
+    # 90-degree rotation about world Z, translation (1,2,3).
+    theta = np.pi / 2
+    R = np.array(
+        [[np.cos(theta), -np.sin(theta), 0.0],

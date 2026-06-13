@@ -88,3 +88,33 @@ def _build_representative_scene(seed: int = 7) -> Scene4D:
     def rand_pts(n):
         return (rng.random((n, 3), dtype=np.float32) * (aabb_max - aabb_min) + aabb_min).astype(
             np.float32
+        )
+
+    static_positions = rand_pts(40)
+    static_colors = rng.integers(0, 256, size=(40, 3), dtype=np.uint8)
+    static_conf = rng.integers(0, 256, size=(40,), dtype=np.uint8)
+
+    # one empty dynamic frame (index 2)
+    counts = [5, 3, 0, 7]
+    dynamic_positions = [rand_pts(c) for c in counts]
+    dynamic_colors = [rng.integers(0, 256, size=(c, 3), dtype=np.uint8) for c in counts]
+
+    M = 6
+    track_positions = rand_pts(M * T).reshape(M, T, 3)
+    visibility = rng.integers(0, 2, size=(M, T), dtype=np.uint8).astype(bool)
+    track_colors = rng.integers(0, 256, size=(M, 3), dtype=np.uint8)
+    tracks = Tracks(positions=track_positions, visibility=visibility, colors=track_colors)
+
+    poses = rng.random((T, 7), dtype=np.float32).astype(np.float32)
+    intrinsics = rng.random((T, 4), dtype=np.float32).astype(np.float32)
+    cameras = CameraTrack(poses=poses, intrinsics=intrinsics)
+
+    return Scene4D(
+        frame_count=T,
+        fps=24.0,
+        aabb_min=aabb_min,
+        aabb_max=aabb_max,
+        static_positions=static_positions,
+        static_colors=static_colors,
+        static_conf=static_conf,
+        dynamic_positions=dynamic_positions,

@@ -58,3 +58,33 @@ export interface DynamicGeometry {
   /** Writable color attribute (u8, normalized) over `colors`. */
   colorAttr: THREE.BufferAttribute;
 }
+
+/**
+ * Pre-allocate **one** geometry sized to the **max** per-frame dynamic point
+ * count (spec/07 §2.1). Per frame we copy that frame's decoder views into these
+ * fixed buffers and update `drawRange` — so playback never allocates a new
+ * `BufferGeometry` (no per-frame GC churn). A frame with `count=0` simply draws
+ * nothing (valid, spec/05 §3.5). Returns `null` when the scene has no dynamic
+ * section.
+ */
+export function buildDynamic(scene: Mv4dScene): DynamicGeometry | null {
+  const d = scene.dynamic;
+  if (!d) return null;
+
+  let maxCount = 0;
+  for (const f of d.frames) if (f.count > maxCount) maxCount = f.count;
+
+  const g = new THREE.BufferGeometry();
+  // Fixed-capacity buffers (own storage, NOT decoder views) — we write a frame's
+  // points into the [0, count) prefix each tick and set drawRange to `count`.
+  const positions = new Uint16Array(maxCount * 3);
+  const colors = new Uint8Array(maxCount * 3);
+
+  const positionAttr = new THREE.BufferAttribute(
+    positions,
+    3,
+    /* normalized */ true,
+  );
+  const colorAttr = new THREE.BufferAttribute(colors, 3, /* normalized */ true);
+  // Mark mutable so the renderer re-uploads the changed prefix each frame.
+  positionAttr.setUsage(THREE.DynamicDrawUsage);

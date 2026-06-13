@@ -58,3 +58,33 @@ def _cuda_available() -> bool:
     """True iff torch is importable AND reports an available CUDA device."""
     try:
         import torch
+    except Exception:
+        return False
+    try:
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
+
+
+# --- UNMARKED: honest-stub contract (runs in `make test`; no GPU / no ML deps) -----
+@pytest.mark.parametrize("module_name, class_name, constraint", _OPTIONAL_ADAPTERS)
+def test_optional_adapter_raises_unsupported_device_on_mps(
+    module_name, class_name, constraint
+) -> None:
+    """Each optional adapter raises ``UnsupportedDeviceError`` on device "mps".
+
+    It does NOT silently fall back; the message names the constraint and points at the
+    cloud-GPU deploy (spec/11). This proves the honest-stub contract WITHOUT any GPU —
+    the raise precedes any model load, so no torch import happens.
+    """
+    adapter = _build(module_name, class_name)
+
+    # ``info`` is cheap + license-tagged even though reconstruct refuses MPS (D2).
+    assert adapter.info.weights_license, "weights_license must be populated (D2)"
+    assert adapter.info.mps_capable is False, "optional adapters are not MPS-capable"
+
+    req = ReconstructionRequest(video_path="(ignored)", max_frames=4, device="mps")
+    with pytest.raises(UnsupportedDeviceError) as exc_info:
+        adapter.reconstruct(req)
+
+    msg = str(exc_info.value)

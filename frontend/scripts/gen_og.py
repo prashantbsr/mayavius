@@ -88,3 +88,33 @@ def png_bytes(px) -> bytes:
     raw = bytearray()
     for row in px:
         raw.append(0)  # filter type 0
+        for (r, g, b) in row:
+            raw += bytes((r, g, b))
+    comp = zlib.compress(bytes(raw), 9)
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
+
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0)  # 8-bit, RGB
+    return sig + chunk(b"IHDR", ihdr) + chunk(b"IDAT", comp) + chunk(b"IEND", b"")
+
+
+def main() -> None:
+    px = new_canvas()
+
+    # Wordmark, centered.
+    word = "mayavius"
+    wm_scale = 18
+    wm_w = text_width(word, wm_scale)
+    wm_x = (W - wm_w) // 2
+    wm_y = 210
+    text(px, word, wm_x, wm_y, wm_scale, FG)
+
+    # Accent rule under the wordmark.
+    rule_w = 360

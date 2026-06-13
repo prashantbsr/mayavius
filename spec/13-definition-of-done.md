@@ -115,3 +115,58 @@ matches its description, not a pixel diff.
 
 ---
 
+## 7. Frontend hygiene
+
+| # | Gate | Verification |
+|---|------|--------------|
+| 7.1 | [ ] **`tsc --noEmit` clean** | `cd frontend && npx tsc --noEmit` → exit 0, 0 errors |
+| 7.2 | [ ] **lint clean** | `cd frontend && npm run lint` (== `make lint`) → exit 0 |
+| 7.3 | [ ] Frontend unit + e2e green (Vitest + Playwright, added in spec/10) | `cd frontend && npx vitest run` and the Playwright suite → exit 0 |
+| 7.4 | [ ] `ssr:false` boundary correct — `ViewerClient` (`'use client'`) does `dynamic(()=>import('./ViewerCanvas'),{ssr:false})`; **no** `ssr:false` in a Server Component | `grep -RnE "ssr:\s*false" frontend/src` appears only in a file containing `'use client'` | [03 D5](03-decisions-locked.md); CLAUDE.md |
+| 7.5 | [ ] Zustand store contract — `viewerStore` exposes `time ∈ [0,1]`, `isPlaying`, `loop`, `frozen`; the R3F loop reads/writes it outside React renders | `grep -nE "time|isPlaying|loop|frozen" frontend/src/lib/state/viewerStore.ts` → all present | [03 D6](03-decisions-locked.md); CLAUDE.md |
+
+---
+
+## 8. Path-2 Spark seam exists (unused) — no rearchitecting
+
+| # | Gate | Verification |
+|---|------|--------------|
+| 8.1 | [ ] The **Path-2 seam is present at `Scene.tsx`**: a documented mount point where a Spark `@sparkjsdev/spark` `<SplatMesh>` 4DGS layer can drop in **alongside** Path 1, controls/timeline decoupled | `grep -niE "Path 2|SplatMesh|@sparkjsdev/spark|seam" frontend/src/components/viewer/Scene.tsx` → matches |
+| 8.2 | [ ] Spark is **NOT** a runtime dependency (Path 2 is out of MVP) | `grep -c "@sparkjsdev/spark" frontend/package.json` → `0` | [08 §2](08-dependencies-and-env.md); [03 D-render](03-decisions-locked.md) |
+| 8.3 | [ ] No Path-1 rearchitecting was needed to leave the seam — `Scene4D`/`THREE.Points`/`Line2`-`LineSegments2` ribbon path is intact and the seam is inert | seam code is a comment/no-op branch, not a live import; build passes without Spark | handover §4.2 |
+
+---
+
+## 9. Repository hygiene (never-commit list)
+
+| # | Gate | Verification |
+|---|------|--------------|
+| 9.1 | [ ] **No weights committed** — `*.pt/*.pth/*.ckpt/*.safetensors/*.onnx` | `git ls-files | grep -Ei '\.(pt|pth|ckpt|safetensors|onnx)$'` → **empty** |
+| 9.2 | [ ] **No `.venv/`, `node_modules/`, `.next/`** committed | `git ls-files | grep -E '(^|/)(\.venv|node_modules|\.next)/'` → **empty** |
+| 9.3 | [ ] **No env files** committed except `.env.example` | `git ls-files | grep -E '\.env' | grep -v '\.env\.example$'` → **empty** |
+| 9.4 | [ ] **No stray sample-video binaries** beyond the curated corpus | `git ls-files | grep -Ei '\.(mp4|mov|webm)$'` ⊆ the corpus manifest |
+| 9.5 | [ ] `requirements-ml.txt` exists with frozen exact pins but is **not** auto-installed by `make setup` (ML is deferred) | `make setup` installs lightweight deps only; ML install is a separate documented step (§08.4) |
+
+---
+
+## 10. Wave acceptance (spec/09) roll-up
+
+Done requires **every wave's acceptance test in `spec/09` is green**. This is the
+gate-of-gates: a wave is not complete until its own acceptance criteria pass, and
+the MVP is not done until the final wave passes. Mapping (waves own their detail;
+this table is the index, `spec/09` is authoritative):
+
+| Wave (spec/09) | Its acceptance maps to DoD sections |
+|----------------|-------------------------------------|
+| [ ] Wire format (MV4D encoder/decoder) | §1.5, §2 |
+| [ ] Backend skeleton + hexagonal core + job model | §1, §3.1, §3.3–3.5 |
+| [ ] Default adapter combo (VGGT + CoTracker3) on MPS | §3.2, §4 |
+| [ ] Frontend viewer (Path 1) + controls + bullet-time | §3.6, §7 |
+| [ ] Shareable result route + SEO + share cards | §6.4–6.5 |
+| [ ] Sample corpus + README + GIF | §5, §6.1–6.3 |
+| [ ] Path-2 seam left inert; repo hygiene | §8, §9 |
+
+**The MVP is DONE iff every box in §0–§10 is `[x]` on a clean checkout of the
+target 36 GB Apple-Silicon Mac.** No box may be waived; an out-of-scope item
+(e.g. an optional cloud-GPU adapter, Path 2) is satisfied by its *seam/negative-
+knowledge* gate (§4.4, §8), not by implementation.

@@ -268,3 +268,33 @@ def assemble_scene4d(
                 pts = world_points[t].reshape(-1, 3)
                 cnf = wp_conf[t].reshape(-1) if wp_conf.size else np.zeros(pts.shape[0], np.float32)
                 finite = np.isfinite(pts).all(axis=1)
+                static_chunks_p.append(pts[finite])
+                static_chunks_c.append(_frame_colors(geo, t, finite))
+                static_chunks_conf.append(cnf[finite])
+
+    # Pad dynamic lists to T = max(S, track T) so frame_count is consistent.
+    T = max(S, tr_pos.shape[1] if tr_pos.ndim == 3 else 0, 1)
+    while len(dynamic_positions) < T:
+        dynamic_positions.append(np.empty((0, 3), np.float32))
+        dynamic_colors.append(np.empty((0, 3), np.uint8))
+
+    # ---- static: low-motion union deduped by voxel grid (keep highest-conf per voxel).
+    if static_chunks_p:
+        static_p = np.concatenate(static_chunks_p, axis=0).astype(np.float32) if any(c.size for c in static_chunks_p) else np.empty((0, 3), np.float32)
+        static_c = np.concatenate(static_chunks_c, axis=0).astype(np.uint8) if any(c.size for c in static_chunks_c) else np.empty((0, 3), np.uint8)
+        static_conf_raw = np.concatenate(static_chunks_conf, axis=0).astype(np.float32) if any(c.size for c in static_chunks_conf) else np.empty((0,), np.float32)
+    else:
+        static_p = np.empty((0, 3), np.float32)
+        static_c = np.empty((0, 3), np.uint8)
+        static_conf_raw = np.empty((0,), np.float32)
+
+    # static_conf (u8): per-scene min-max normalize VGGT conf → [0,255].
+    static_conf_u8 = _normalize_conf_u8(static_conf_raw)
+
+    static_p, static_c, static_conf_u8 = _voxel_dedup(
+        static_p, static_c, static_conf_u8, voxel, amin
+    )
+
+    # ---- final AABB over EVERYTHING that ends up in the scene.
+    all_dyn = np.concatenate(dynamic_positions, axis=0) if any(p.size for p in dynamic_positions) else np.empty((0, 3), np.float32)
+    f_amin, f_amax, _ = _aabb_over(static_p, all_dyn, tr_pos.reshape(-1, 3))

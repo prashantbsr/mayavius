@@ -28,3 +28,16 @@ test.describe("T-401 example.reconstructs", () => {
         intervals: [100, 200, 300],
       })
       .toBeGreaterThan(0);
+  });
+
+  test("the loaded viewer exposes a consistent debug surface", async ({
+    page,
+  }) => {
+    // Direct deep-link to the same seeded result loads identically.
+    await openLoadedViewer(page, "example");
+    const dbg = await page.evaluate(() => window.__mayaviusDebug ?? null);
+    expect(dbg).not.toBeNull();
+    expect(dbg!.staticPointCount).toBeGreaterThan(0);
+    expect(dbg!.cameraQuaternion).toHaveLength(4);
+  });
+});

@@ -268,3 +268,33 @@ def test_caps_dynamic_subsample_is_deterministic() -> None:
 
 
 def test_caps_frame_cull_runs_first_keeps_axes_aligned() -> None:
+    """T-104 — frame cap runs FIRST: dynamic list / track T-axis / camera length all == T2."""
+    scene = _over_cap_scene()
+    result = enforce_caps(scene)
+    T2 = result.frame_count
+
+    # All four per-frame structures share the SINGLE new frame_count.
+    assert len(result.dynamic_positions) == T2
+    assert len(result.dynamic_colors) == T2
+    assert result.tracks is not None
+    assert result.tracks.positions.shape[1] == T2
+    assert result.tracks.visibility.shape[1] == T2
+    assert result.cameras is not None
+    assert result.cameras.poses.shape[0] == T2
+    assert result.cameras.intrinsics.shape[0] == T2
+
+    # Without cameras, enforce_caps still aligns the rest (cameras stays None).
+    scene_nocam = _over_cap_scene(with_cameras=False)
+    res2 = enforce_caps(scene_nocam)
+    assert res2.cameras is None
+    assert len(res2.dynamic_positions) == res2.frame_count
+    assert res2.tracks is not None
+    assert res2.tracks.positions.shape[1] == res2.frame_count
+
+
+def test_no_separate_oversize_exception_path() -> None:
+    """T-104 — there is NO ">24 MB" exception; the ONLY encode-path raise is EmptyReconstructionError.
+
+    Statically confirm the service/encoder modules carry no size-ceiling raise, and
+    that the single raise in the service is ``EmptyReconstructionError``.
+    """

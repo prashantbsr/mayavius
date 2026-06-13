@@ -148,3 +148,33 @@ def _dequantize(q: np.ndarray, amin: np.ndarray, amax: np.ndarray) -> np.ndarray
 
 def test_quantize_roundtrip_within_one_lsb() -> None:
     """quantize -> dequantize reconstructs each position within one quantization step."""
+    rng = np.random.default_rng(7)
+    pts = (rng.random((1000, 3)) * 10.0 - 5.0).astype(np.float32)
+    amin, amax = compute_aabb(pts)
+    q = quantize_positions(pts, amin, amax)
+    assert q.dtype == np.uint16
+    deq = _dequantize(q, amin, amax)
+
+    step = (amax - amin).astype(np.float32) / np.float32(_QMAX)
+    # Reconstruction error <= half a step + f32 slack on every axis.
+    err = np.abs(deq - pts)
+    tol = 0.5 * step[None, :] + 1e-4 * np.maximum(np.abs(amax), np.abs(amin))[None, :] + 1e-5
+    assert np.all(err <= tol), float(err.max())
+
+
+def test_quantize_matches_encoder_quantize_exactly() -> None:
+    """pipeline.quantize_positions is byte-identical to the encoder's _quantize."""
+    from app.wire.encoder import _quantize as enc_quantize
+
+    rng = np.random.default_rng(11)
+    pts = (rng.random((500, 3)) * 4.0 - 2.0).astype(np.float32)
+    amin, amax = compute_aabb(pts)
+    q_pipeline = quantize_positions(pts, amin, amax)
+    q_encoder = enc_quantize(pts, amin, amax)
+    assert np.array_equal(q_pipeline, q_encoder)
+
+
+def test_quantize_degenerate_axis_is_zero() -> None:
+    """A degenerate axis (aabb_max == aabb_min) quantizes that axis to 0 for all points."""
+    pts = np.array(
+        [[0.0, 5.0, 1.0], [0.0, 5.0, 2.0], [0.0, 5.0, 3.0]], dtype=np.float32

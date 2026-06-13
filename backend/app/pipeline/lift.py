@@ -58,3 +58,33 @@ def _normalize_intrinsics(intrinsics: np.ndarray, T: int) -> np.ndarray:
 
 def _normalize_c2w(c2w: np.ndarray, T: int) -> np.ndarray:
     """Coerce camera->world transforms to ``(T, 4, 4)`` float32.
+
+    Accepts ``(T, 4, 4)``, ``(T, 3, 4)`` (homogeneous bottom row appended), a single
+    ``(4, 4)`` / ``(3, 4)`` broadcast across frames.
+    """
+    arr = np.asarray(c2w, dtype=np.float32)
+
+    def _pad34(m: np.ndarray) -> np.ndarray:
+        bottom = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+        return np.concatenate([m, bottom[None, :]], axis=0)
+
+    if arr.ndim == 2 and arr.shape == (4, 4):
+        return np.broadcast_to(arr, (T, 4, 4)).astype(np.float32).copy()
+    if arr.ndim == 2 and arr.shape == (3, 4):
+        return np.broadcast_to(_pad34(arr), (T, 4, 4)).astype(np.float32).copy()
+    if arr.ndim == 3 and arr.shape == (T, 4, 4):
+        return arr.copy()
+    if arr.ndim == 3 and arr.shape == (T, 3, 4):
+        out = np.empty((T, 4, 4), dtype=np.float32)
+        for t in range(T):
+            out[t] = _pad34(arr[t])
+        return out
+    raise ValueError(
+        f"c2w must be (T,4,4), (T,3,4), (4,4) or (3,4); got shape {arr.shape} for T={T}"
+    )
+
+
+def lift_tracks_to_3d(
+    tracks_2d: np.ndarray,
+    visibility: np.ndarray,
+    depth: np.ndarray,

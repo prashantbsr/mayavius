@@ -148,3 +148,12 @@ export function UploadDropzone() {
         <span className="text-sm opacity-60">
           or click to choose a file · video/* · up to {MAX_UPLOAD_MB} MB
         </span>
+      </div>
+      {localError ? (
+        <p role="alert" className="text-sm text-red-500" data-testid="upload-error">
+          {localError}
+        </p>
+      ) : null}
+    </div>
+  );
+}

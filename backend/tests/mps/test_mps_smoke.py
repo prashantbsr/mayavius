@@ -118,3 +118,33 @@ def test_mps_available() -> None:
             f"torch {torch.__version__} < floor {'.'.join(map(str, _TORCH_FLOOR))} "
             "(spec/10 §5 / spec/08 §4.1)"
         )
+
+
+# --- T-510 ----------------------------------------------------------------------
+@pytest.mark.skipif(_SKIP is not None, reason=_SKIP or "")
+def test_vggt_cotracker3_smoke(capsys) -> None:
+    """Real combo on ONE bundled ≤3 s clip → valid Scene4D encoding within caps.
+
+    Asserts: completes without raising; ≥1 static point AND ≥1 track; the Scene4D
+    encodes to MV4D and the encoded scene honors the MV4D caps (chains
+    ``encode_reconstruction`` + the cap constants). MEASURES + PRINTS (does NOT assert)
+    wall-time + peak MPS memory — verify, don't assert blind (decision-log §E,H).
+    """
+    import torch  # noqa: F401  (imported INSIDE the test — collection needs no ML deps)
+
+    # vggt is pulled lazily by the adapter on first reconstruct(); skip cleanly if the
+    # ML deps are not installed (collection already succeeded without them).
+    try:
+        import vggt  # noqa: F401
+    except Exception as exc:  # pragma: no cover - exercised only on-device
+        pytest.skip(f"vggt not installed (requirements-ml.txt): {exc!r}")
+
+    if not _SAMPLE_CLIP.exists():
+        pytest.skip(f"no bundled sample clip at {_SAMPLE_CLIP}")
+
+    from app.adapters.combo import VggtCoTracker3Adapter
+    from app.config import settings
+    from app.core.domain.models import Scene4D
+    from app.core.services.reconstruction_service import enforce_caps
+    from app.wire.decoder import decode
+    from app.wire.encoder import encode_reconstruction

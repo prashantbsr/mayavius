@@ -88,3 +88,33 @@ def test_corpus_present_and_licensed(slug: str) -> None:
         f"(spec/10 §6). Re-encode to <=540p/<=3 s — do NOT raise the cap."
     )
 
+    # --- duration <= 3 s (probe with OpenCV; importorskip only this sub-check) -
+    # If cv2 is unavailable we skip ONLY the duration assertion (importorskip),
+    # never the presence/license assertions above — those are non-negotiable.
+    cv2 = pytest.importorskip(
+        "cv2",
+        reason="OpenCV (cv2) not installed; skipping only the duration sub-check.",
+    )
+    cap = cv2.VideoCapture(str(clip))
+    try:
+        assert cap.isOpened(), f"OpenCV could not open corpus clip {clip}"
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    finally:
+        cap.release()
+
+    if fps and fps > 0 and frame_count and frame_count > 0:
+        duration_s = frame_count / fps
+        assert duration_s <= MAX_DURATION_S + 1e-3, (
+            f"corpus clip {clip} is {duration_s:.2f}s, over the "
+            f"{MAX_DURATION_S}s cap (spec/10 §6). Re-encode shorter; do not relax."
+        )
+    else:
+        # Metadata unreadable (fps/frame-count == 0): fall back to the sidecar's
+        # declared duration_s if present so the cap is still enforced; otherwise
+        # skip ONLY this sub-check (the clip still passed presence/license/size).
+        declared = meta.get("duration_s")
+        if isinstance(declared, (int, float)) and declared > 0:
+            assert declared <= MAX_DURATION_S + 1e-3, (
+                f"sidecar duration_s={declared} for {slug!r} exceeds the "
+                f"{MAX_DURATION_S}s cap (spec/10 §6)."

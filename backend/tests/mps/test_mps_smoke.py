@@ -238,3 +238,33 @@ def test_mps_fallback_documented(caplog) -> None:
     except Exception as exc:  # pragma: no cover - exercised only on-device
         pytest.skip(f"vggt not installed (requirements-ml.txt): {exc!r}")
 
+    if not _SAMPLE_CLIP.exists():
+        pytest.skip(f"no bundled sample clip at {_SAMPLE_CLIP}")
+
+    # The fallback env MUST be set before the adapter imports torch (spec/08 §5); the
+    # adapters setdefault it, but assert it here so the test documents the contract.
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+    assert os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK") == "1"
+
+    from app.adapters.combo import VggtCoTracker3Adapter
+    from app.config import settings
+    from app.core.domain.models import ReconstructionRequest
+
+    req = ReconstructionRequest(
+        video_path=str(_SAMPLE_CLIP),
+        max_frames=min(getattr(settings, "max_clip_frames", 8), 8),
+        target_fps=getattr(settings, "target_fps", 12.0),
+        device="mps",
+    )
+    adapter = VggtCoTracker3Adapter(settings)
+
+    caplog.set_level(logging.INFO)
+    fallback_ops: list[str] = []
+    with warnings.catch_warnings(record=True) as wlist:
+        warnings.simplefilter("always")
+        try:
+            adapter.reconstruct(req)
+        except Exception as exc:  # op failed EVEN WITH fallback → a documented dead end
+            pytest.fail(
+                f"an op failed on MPS even with PYTORCH_ENABLE_MPS_FALLBACK=1 "
+                f"({exc!r}); run this adapter on the cloud-GPU deploy (spec/11)."

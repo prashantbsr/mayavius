@@ -88,3 +88,33 @@ def _peak_mps_gb() -> float | None:
     """
     try:
         import torch
+
+        mps = getattr(torch, "mps", None)
+        if mps is None:
+            return None
+        for fn_name in ("driver_allocated_memory", "current_allocated_memory"):
+            fn = getattr(mps, fn_name, None)
+            if callable(fn):
+                try:
+                    return float(fn()) / (1024.0**3)
+                except Exception:
+                    continue
+        return None
+    except Exception:
+        return None
+
+
+# --- T-500 ----------------------------------------------------------------------
+@pytest.mark.skipif(_SKIP is not None, reason=_SKIP or "")
+def test_mps_available() -> None:
+    """``torch.backends.mps.is_available()`` is True and torch ≥ 2.5.0 floor (else skip)."""
+    import torch  # imported INSIDE the test (collection needs no ML deps)
+
+    assert torch.backends.mps.is_available(), "MPS backend unavailable on this machine"
+
+    ver = _torch_version_tuple(torch.__version__)
+    if ver < _TORCH_FLOOR:
+        pytest.skip(
+            f"torch {torch.__version__} < floor {'.'.join(map(str, _TORCH_FLOOR))} "
+            "(spec/10 §5 / spec/08 §4.1)"
+        )

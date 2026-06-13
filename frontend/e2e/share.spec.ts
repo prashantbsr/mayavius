@@ -28,3 +28,33 @@ test.describe("T-406 share.link", () => {
       // og:* share-card tags present in the head (the virality surface, spec/07 §8).
       const ogTitle = page.locator('head meta[property="og:title"]');
       const ogDesc = page.locator('head meta[property="og:description"]');
+      const ogUrl = page.locator('head meta[property="og:url"]');
+      const ogImage = page.locator('head meta[property="og:image"]');
+      const ogType = page.locator('head meta[property="og:type"]');
+
+      await expect(ogTitle).toHaveCount(1);
+      await expect(ogDesc).toHaveCount(1);
+      await expect(ogUrl).toHaveCount(1);
+      await expect(ogImage).toHaveCount(1);
+      await expect(ogType).toHaveAttribute("content", "website");
+
+      // The title/url carry the example identity and the canonical /view/example.
+      await expect(ogTitle).toHaveAttribute("content", /example/i);
+      await expect(ogUrl).toHaveAttribute("content", /\/view\/example$/);
+
+      // Twitter summary_large_image card (the screenshot-able preview).
+      await expect(
+        page.locator('head meta[name="twitter:card"]'),
+      ).toHaveAttribute("content", "summary_large_image");
+
+      // The SAME result actually loads in the fresh context (cloud renders).
+      await page.waitForSelector("canvas", { timeout: 30_000 });
+      await expect
+        .poll(() => debugNumber(page, "staticPointCount", -1), {
+          timeout: 30_000,
+          intervals: [100, 200, 300],
+        })
+        .toBeGreaterThan(0);
+    } finally {
+      await context.close();
+    }

@@ -118,3 +118,33 @@ def lift_tracks_to_3d(
     if dep.ndim != 3 or dep.shape[0] != T:
         raise ValueError(f"depth must be (T,H,W) with T={T}; got {dep.shape}")
     H, W = dep.shape[1], dep.shape[2]
+
+    K = _normalize_intrinsics(intrinsics_px, T)   # (T,4)
+    C = _normalize_c2w(c2w, T)                     # (T,4,4)
+
+    positions = np.zeros((M, T, 3), dtype=np.float32)
+    out_vis = np.zeros((M, T), dtype=bool)
+
+    for t in range(T):
+        fx, fy, cx, cy = (float(K[t, 0]), float(K[t, 1]), float(K[t, 2]), float(K[t, 3]))
+        R = C[t, :3, :3]          # (3,3) c2w rotation
+        tr = C[t, :3, 3]          # (3,) c2w translation
+        u = uv[:, t, 0]           # (M,)
+        v = uv[:, t, 1]
+
+        # Depth sampled at (round(v), round(u)); out-of-bounds -> invalid.
+        ui = np.rint(u).astype(np.int64)
+        vi = np.rint(v).astype(np.int64)
+        in_bounds = (ui >= 0) & (ui < W) & (vi >= 0) & (vi < H)
+        ui_c = np.clip(ui, 0, W - 1)
+        vi_c = np.clip(vi, 0, H - 1)
+        D = dep[t, vi_c, ui_c]    # (M,)
+
+        valid = in_bounds & np.isfinite(D) & (D > 0) & vis_in[:, t]
+
+        # OpenCV unprojection (z-along-axis depth).
+        x_cam = (u - cx) * D / np.float32(fx if fx != 0 else 1.0)
+        y_cam = (v - cy) * D / np.float32(fy if fy != 0 else 1.0)
+        z_cam = D
+        p_cam = np.stack([x_cam, y_cam, z_cam], axis=1).astype(np.float32)  # (M,3)
+

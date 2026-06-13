@@ -88,3 +88,33 @@ def lift_tracks_to_3d(
     tracks_2d: np.ndarray,
     visibility: np.ndarray,
     depth: np.ndarray,
+    intrinsics_px,
+    c2w,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Unproject 2D pixel tracks to mayavius world space (spec/06 §5 step 4 / §4.1a).
+
+    Args:
+      tracks_2d:    ``(M, T, 2)`` pixel coords ``(u_px, v_px)`` on the processed grid.
+      visibility:   ``(M, T)`` bool — CoTracker ``pred_visibility``.
+      depth:        ``(T, H, W)`` float32 — VGGT z-along-axis depth (pixel grid).
+      intrinsics_px: per-frame ``(fx, fy, cx, cy)`` pixels — ``(T,4)`` / ``(4,)`` /
+                    ``(T,3,3)`` / ``(3,3)`` (the divisor is in the SAME processed
+                    ``(W, H)`` as ``tracks_2d``, grid-consistency).
+      c2w:          camera->world transform per frame — ``(T,4,4)`` / ``(T,3,4)`` /
+                    ``(4,4)`` / ``(3,4)``.
+
+    Returns ``(positions, out_visibility)``:
+      positions:      ``(M, T, 3)`` float32 world space (mayavius convention).
+      out_visibility: ``(M, T)`` bool — input visibility AND a valid (in-bounds,
+                      finite, > 0) depth sample. Holes/occlusion -> invisible.
+    """
+    uv = np.asarray(tracks_2d, dtype=np.float32)
+    if uv.ndim != 3 or uv.shape[2] != 2:
+        raise ValueError(f"tracks_2d must be (M,T,2); got {uv.shape}")
+    M, T = uv.shape[0], uv.shape[1]
+
+    vis_in = np.asarray(visibility, dtype=bool).reshape(M, T)
+    dep = np.asarray(depth, dtype=np.float32)
+    if dep.ndim != 3 or dep.shape[0] != T:
+        raise ValueError(f"depth must be (T,H,W) with T={T}; got {dep.shape}")
+    H, W = dep.shape[1], dep.shape[2]

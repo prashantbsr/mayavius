@@ -88,3 +88,23 @@ test.describe("T-405 bullet_time.orbit", () => {
     await page.mouse.up();
     // Let the loop publish the post-drag camera quaternion.
     await page.waitForTimeout(120);
+
+    const qAfter = await cameraQuaternion(page);
+    expect(qAfter).not.toBeNull();
+
+    // Camera rotated: the quaternion moved meaningfully.
+    expect(
+      quatDelta(qBefore!, qAfter!),
+      `cameraQuaternion should change under an orbit drag (before=${JSON.stringify(
+        qBefore,
+      )}, after=${JSON.stringify(qAfter)})`,
+    ).toBeGreaterThan(1e-3);
+
+    // …while the frozen frame index stayed constant (time did NOT advance).
+    const frameAfter = await debugNumber(page, "frameIndex", -999);
+    expect(frameAfter).toBe(frozenFrame);
+    // Belt-and-suspenders: still frozen, still paused after the drag.
+    expect(await storeField<boolean>(page, "frozen")).toBe(true);
+    expect(await storeField<boolean>(page, "isPlaying")).toBe(false);
+  });
+});

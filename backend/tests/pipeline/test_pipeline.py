@@ -178,3 +178,33 @@ def test_quantize_degenerate_axis_is_zero() -> None:
     """A degenerate axis (aabb_max == aabb_min) quantizes that axis to 0 for all points."""
     pts = np.array(
         [[0.0, 5.0, 1.0], [0.0, 5.0, 2.0], [0.0, 5.0, 3.0]], dtype=np.float32
+    )  # x and y constant -> degenerate
+    amin, amax = compute_aabb(pts)
+    assert amin[0] == amax[0] and amin[1] == amax[1]  # degenerate x, y
+    q = quantize_positions(pts, amin, amax)
+    assert np.all(q[:, 0] == 0)
+    assert np.all(q[:, 1] == 0)
+    # z is non-degenerate: endpoints map to 0 and 65535.
+    assert q[0, 2] == 0
+    assert q[-1, 2] == _QMAX
+
+
+def test_quantize_clips_out_of_aabb_points() -> None:
+    """Points outside the supplied AABB are defensively clipped to [0,65535]."""
+    amin = np.zeros(3, dtype=np.float32)
+    amax = np.ones(3, dtype=np.float32)
+    pts = np.array([[-1.0, 2.0, 0.5]], dtype=np.float32)  # below min, above max
+    q = quantize_positions(pts, amin, amax)
+    assert q[0, 0] == 0
+    assert q[0, 1] == _QMAX
+    assert 0 <= q[0, 2] <= _QMAX
+
+
+def test_compute_aabb_over_multiple_sets() -> None:
+    """compute_aabb spans the union of all passed point sets."""
+    a = np.array([[0.0, 0.0, 0.0]], dtype=np.float32)
+    b = np.array([[1.0, -2.0, 3.0]], dtype=np.float32)
+    c = np.array([[-4.0, 5.0, 1.0]], dtype=np.float32)
+    amin, amax = compute_aabb(a, b, c)
+    assert np.array_equal(amin, np.array([-4.0, -2.0, 0.0], dtype=np.float32))
+    assert np.array_equal(amax, np.array([1.0, 5.0, 3.0], dtype=np.float32))

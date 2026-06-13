@@ -27,6 +27,38 @@ class Settings(BaseSettings):
     max_clip_frames: int = 24
     #: Upload size guard (MB).
     max_upload_mb: int = 64
+    #: Active adapter id resolved by ``build_adapter`` at startup (06 §4.6). "fake"
+    #: selects the no-ML FixtureAdapter (fixture mode, Waves 1-2 + e2e).
+    adapter: str = "vggt+cotracker3"
+    #: Inference device passed into ``ReconstructionRequest.device``.
+    device: str = "mps"
+    #: Subsample target + MV4D playback fps (06 §5 step 1 / spec/05 header).
+    target_fps: float = 12.0
+    #: Static/dynamic split percentile threshold (06 §5 step 5).
+    motion_thresh: float = 0.95
+    #: Confidence-cull floor for static points (06 §5 step 6).
+    conf_thresh: float = 0.5
+    #: VGGT checkpoint id (commercial swap = facebook/VGGT-1B-Commercial, 06 §4.1).
+    vggt_weights: str = "facebook/VGGT-1B"
+    #: Result blob store, resolved ABSOLUTE to backend/outputs (06 §8); served by /result.
+    result_dir: str = "outputs"
 
 
 settings = Settings()
+
+# --- Absolute runtime dirs (06 §6/§8). parents[1] = backend/, parents[2] = repo root. ---
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: Worker blob store (backend/outputs by default); served immutable by /result.
+RESULT_DIR: Path = _BACKEND_ROOT / settings.result_dir
+#: Streamed-upload landing dir (backend/uploads); gitignored.
+UPLOAD_DIR: Path = _BACKEND_ROOT / "uploads"
+#: Repo-root example corpus the lifespan seeds from (assets/samples/*.mv4d, 06 §6).
+SAMPLES_DIR: Path = _REPO_ROOT / "assets" / "samples"
+
+# Create the writable dirs at import/startup. SAMPLES_DIR is read-only corpus —
+# create it too so a fresh clone with no committed samples still globs cleanly.
+RESULT_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+SAMPLES_DIR.mkdir(parents=True, exist_ok=True)

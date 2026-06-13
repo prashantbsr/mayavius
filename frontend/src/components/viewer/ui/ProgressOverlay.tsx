@@ -58,3 +58,15 @@ export function ProgressOverlay() {
               />
             </div>
             <div className="mt-1 text-right text-[10px] tabular-nums text-white/60">
+              {pct}%
+            </div>
+          </>
+        )}
+
+        {weightsLicense ? (
+          <div className="mt-3 text-[10px] text-white/50">{weightsLicense}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}

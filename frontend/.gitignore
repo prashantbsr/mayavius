@@ -36,8 +36,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — ignore real envs, but DO commit the example (mirrors root .gitignore)
 .env*
+!.env.example
 
 # vercel
 .vercel

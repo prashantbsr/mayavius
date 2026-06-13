@@ -118,3 +118,33 @@ def _over_cap_scene(*, seed: int = 1234, with_cameras: bool = True) -> Scene4D:
         aabb_min=np.zeros(3, dtype=np.float32),
         aabb_max=np.ones(3, dtype=np.float32),
         static_positions=static_positions,
+        static_colors=static_colors,
+        static_conf=static_conf,
+        dynamic_positions=dynamic_positions,
+        dynamic_colors=dynamic_colors,
+        tracks=tracks,
+        cameras=cameras,
+    )
+
+
+def test_caps_enforced() -> None:
+    """T-104 — an over-cap Scene4D is culled/subsampled to within EVERY cap."""
+    scene = _over_cap_scene()
+    result = enforce_caps(scene)
+
+    # --- frame cap: T <= 64, and the frame cull ran FIRST so every per-frame array
+    #     (dynamic list, track T-axis, camera length) is aligned to the new T. ---
+    T2 = result.frame_count
+    assert T2 <= MAX_FRAMES
+    assert T2 == len(result.dynamic_positions) == len(result.dynamic_colors)
+    assert result.tracks is not None
+    assert result.tracks.positions.shape[1] == T2
+    assert result.tracks.visibility.shape[1] == T2
+    assert result.cameras is not None
+    assert result.cameras.poses.shape[0] == T2
+    assert result.cameras.intrinsics.shape[0] == T2
+
+    # --- static cap: N_s <= 150k ---
+    assert result.static_positions.shape[0] <= MAX_STATIC
+    assert result.static_colors.shape[0] == result.static_positions.shape[0]
+    assert result.static_conf is not None

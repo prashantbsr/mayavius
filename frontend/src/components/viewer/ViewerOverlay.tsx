@@ -28,3 +28,7 @@ export function ViewerOverlay() {
           <PlaybackControls />
           <BulletTimeButton />
         </div>
+      </div>
+    </div>
+  );
+}

@@ -58,3 +58,33 @@ def new_canvas() -> list[list[tuple[int, int, int]]]:
 
 def put(px, x: int, y: int, c) -> None:
     if 0 <= x < W and 0 <= y < H:
+        px[y][x] = c
+
+
+def rect(px, x0: int, y0: int, w: int, h: int, c) -> None:
+    for yy in range(y0, y0 + h):
+        for xx in range(x0, x0 + w):
+            put(px, xx, yy, c)
+
+
+def text(px, s: str, x: int, y: int, scale: int, c) -> int:
+    """Draw `s` (uppercased into the font) at (x,y); return the x cursor end."""
+    cx = x
+    for ch in s.upper():
+        glyph = FONT.get(ch, FONT[" "])
+        for ry, row in enumerate(glyph):
+            for rxi, bit in enumerate(row):
+                if bit == "1":
+                    rect(px, cx + rxi * scale, y + ry * scale, scale, scale, c)
+        cx += (5 + 1) * scale  # 1-cell letter spacing
+    return cx
+
+
+def text_width(s: str, scale: int) -> int:
+    return len(s) * (5 + 1) * scale - scale
+
+
+def png_bytes(px) -> bytes:
+    raw = bytearray()
+    for row in px:
+        raw.append(0)  # filter type 0

@@ -448,3 +448,8 @@ def test_decode_and_subsample_shape_and_cap() -> None:
     assert frames.ndim == 4
     S, C, Hh, Ww = frames.shape
     assert C == 3
+    # width rescaled to 518 (the processed grid).
+    assert Ww == 518
+    assert Hh >= 1
+    # subsample/cap honored.
+    assert 1 <= S <= max_frames

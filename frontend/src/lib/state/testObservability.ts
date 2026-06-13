@@ -28,3 +28,33 @@ import { useViewerStore } from "@/lib/state/viewerStore";
 // progression (0.25 → 0.75 → 1, spec/06 §4.6) is captured deterministically.
 
 declare global {
+  interface Window {
+    /** Snapshot of the live viewerStore state (test-only observation). */
+    __mayaviusStore?: () => ReturnType<typeof useViewerStore.getState>;
+    /** Subscribe to store changes; returns an unsubscribe fn (test-only). */
+    __mayaviusOnStore?: (
+      cb: (state: ReturnType<typeof useViewerStore.getState>) => void,
+    ) => () => void;
+    /** Ordered, de-duplicated history of `progress` values (test-only). */
+    __mayaviusProgressLog?: number[];
+  }
+}
+
+/** Attach the test-observability store surface to `window` and start recording
+ * the progress history. Mount once where the viewer mounts, BEFORE the loader, so
+ * recording is active before the first progress write. No-op during SSR. */
+export function useTestObservability(): void {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.__mayaviusStore = () => useViewerStore.getState();
+    window.__mayaviusOnStore = (cb) => useViewerStore.subscribe(cb);
+
+    // Progress history: seed with the current value, then record every distinct
+    // value the store takes. De-duped + order-preserving so the e2e can assert
+    // both "saw an intermediate 0<p<1" and monotonicity over the run.
+    const log: number[] = [];
+    const push = (p: number) => {
+      if (typeof p === "number" && log[log.length - 1] !== p) log.push(p);
+    };
+    window.__mayaviusProgressLog = log;

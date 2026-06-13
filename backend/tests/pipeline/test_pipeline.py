@@ -358,3 +358,33 @@ def test_assemble_returns_raw_scene_does_not_cap() -> None:
         depth=depth,
         depth_conf=depth,
         camera=CameraTrack(
+            poses=np.tile(np.array([0, 0, 0, 1, 0, 0, 0], np.float32), (S, 1)),
+            intrinsics=np.tile(np.array([1.0, 1.0, 0.5, 0.5], np.float32), (S, 1)),
+        ),
+    )
+    geo.colors = colors  # type: ignore[attr-defined]
+
+    # One moving track following the centers (drives the dynamic classification).
+    tpos = np.stack(centers, axis=0)[None, :, :].astype(np.float32)  # (1,S,3)
+    tr = TrackResult(
+        positions=tpos,
+        visibility=np.ones((1, S), bool),
+        colors=np.array([[200, 200, 200]], np.uint8),
+    )
+    request = ReconstructionRequest(video_path="/tmp/x.mp4", max_frames=24, target_fps=12.0)
+
+    raw = assemble_scene4d(geo, tr, request)
+
+    # RAW: at least one frame is OVER the per-frame dynamic cap (assemble did not cap).
+    max_dyn = max(p.shape[0] for p in raw.dynamic_positions)
+    assert max_dyn > 20_000, max_dyn
+
+    # enforce_caps (the SEPARATE core step) brings every frame under the cap.
+    capped = enforce_caps(raw)
+    for p in capped.dynamic_positions:
+        assert p.shape[0] <= 20_000
+    assert max(p.shape[0] for p in capped.dynamic_positions) == 20_000
+
+
+def test_assemble_fallback_to_sparse_when_vggt_empty() -> None:
+    """If VGGT per-frame maps are unusable, dynamic = sparse moving track points only."""

@@ -28,3 +28,33 @@ const DEFAULT_POINT_SIZE = 2.2;
 
 /** Build the shared dequant ShaderMaterial (spec/07 §2.1). `uOpacity` is lower
  * for the dynamic layer so the foreground reads as motion against the static
+ * cloud; ribbons (§2.2) carry the actual motion history. */
+function makePointMaterial(
+  scene: Mv4dScene,
+  opacity: number,
+): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    vertexShader: POINT_VERT,
+    fragmentShader: POINT_FRAG,
+    // `vertexColors` makes the built-in `color` attribute available to the
+    // shader; we still convert sRGB→linear in the fragment shader to keep one
+    // color path (spec/07 §2.1).
+    vertexColors: true,
+    transparent: opacity < 1,
+    depthWrite: opacity >= 1,
+    uniforms: {
+      uAabbMin: {
+        value: new THREE.Vector3(
+          scene.aabbMin[0],
+          scene.aabbMin[1],
+          scene.aabbMin[2],
+        ),
+      },
+      uAabbMax: {
+        value: new THREE.Vector3(
+          scene.aabbMax[0],
+          scene.aabbMax[1],
+          scene.aabbMax[2],
+        ),
+      },
+      uPointSize: { value: DEFAULT_POINT_SIZE },

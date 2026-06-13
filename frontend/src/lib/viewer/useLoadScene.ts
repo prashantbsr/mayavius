@@ -28,3 +28,33 @@ export function useLoadScene(resultId: string): void {
   const setProgress = useViewerStore((s) => s.setProgress);
   const setScene = useViewerStore((s) => s.setScene);
   const setError = useViewerStore((s) => s.setError);
+  const setWeightsLicense = useViewerStore((s) => s.setWeightsLicense);
+
+  useEffect(() => {
+    // Fresh load: clear any prior error and enter the processing phase. The
+    // stream resolves the rest (a seeded example jumps straight to `done`).
+    setError(null);
+    setProgress(0);
+    setLoadState("processing");
+
+    const stop = streamJob(resultId, {
+      onProgress: (handle, json) => {
+        setLoadState("processing");
+        setProgress(handle.progress ?? json.progress ?? 0);
+        // Surface the active weights-license label as soon as it's known
+        // (spec/07 §6 step 2 — ProgressOverlay renders it).
+        if (json.weights_license) setWeightsLicense(json.weights_license);
+      },
+      onDone: (scene, json) => {
+        // The blob is in hand → decoding to a scene; setScene flips to 'ready'.
+        setLoadState("loading");
+        if (json.weights_license) setWeightsLicense(json.weights_license);
+        setProgress(1);
+        setScene(scene);
+      },
+      onError: (message) => {
+        setLoadState("error");
+        setError(message);
+      },
+    });
+

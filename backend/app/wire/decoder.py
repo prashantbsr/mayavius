@@ -118,3 +118,33 @@ def decode(buffer: bytes) -> Scene4D:
     for kind, off, length, count in entries:
         if kind == _KIND_STATIC:
             n = count
+            cur = off
+            pos_q = np.frombuffer(buf, dtype="<u2", count=n * 3, offset=cur).reshape(n, 3)
+            cur += n * 3 * 2
+            static_positions = _dequantize(pos_q, aabb_min, aabb_max)
+            static_colors = np.frombuffer(buf, dtype=np.uint8, count=n * 3, offset=cur).reshape(n, 3).copy()
+            cur += n * 3
+            if has_static_conf:
+                static_conf = np.frombuffer(buf, dtype=np.uint8, count=n, offset=cur).reshape(n).copy()
+
+        elif kind == _KIND_DYNAMIC:
+            t = count  # == frame_count
+            cur = off
+            frame_dir = np.frombuffer(buf, dtype="<u4", count=t * 2, offset=cur).reshape(t, 2)
+            cur += t * 2 * 4
+            total = int(frame_dir[:, 1].sum()) if t else 0
+            pos_q = np.frombuffer(buf, dtype="<u2", count=total * 3, offset=cur).reshape(total, 3)
+            cur += total * 3 * 2
+            col = np.frombuffer(buf, dtype=np.uint8, count=total * 3, offset=cur).reshape(total, 3)
+            pos_deq = _dequantize(pos_q, aabb_min, aabb_max)
+            frames_pos: list[np.ndarray] = []
+            frames_col: list[np.ndarray] = []
+            for ft in range(t):
+                start = int(frame_dir[ft, 0])
+                cnt = int(frame_dir[ft, 1])
+                frames_pos.append(pos_deq[start:start + cnt].copy())
+                frames_col.append(col[start:start + cnt].copy())
+            dynamic_positions = frames_pos
+            dynamic_colors = frames_col
+
+        elif kind == _KIND_TRACKS:

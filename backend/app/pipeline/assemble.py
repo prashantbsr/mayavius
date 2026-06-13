@@ -118,3 +118,33 @@ def _moving_track_samples(
 ) -> np.ndarray:
     """World positions of the samples of tracks that genuinely MOVE (dynamic seeds).
 
+    A track is "moving" if its NET excursion over the clip — the max distance of its
+    visible world positions from their mean — exceeds the threshold. Net excursion is
+    used instead of per-FRAME displacement (spec/06 §5 step 5's literal signal)
+    because real VGGT camera/depth noise is ~zero-mean: a static-background track
+    jitters in place (net ~ σ·√T, small) while a moving subject travels (net ~ T·v,
+    large), so they separate even when their per-frame motions overlap the noise — the
+    per-frame threshold floods noisy real reconstructions (W4.T3 / risk #4 /
+    decision-log §J). Threshold = max(``motion_thresh_pct``-percentile of net
+    excursions, ``net_floor``). Returns the visible samples of the moving tracks as
+    ``(K, 3)`` float32 (possibly empty).
+    """
+    pos = np.asarray(tr.positions, dtype=np.float32)     # (M,T,3)
+    vis = np.asarray(tr.visibility, dtype=bool)          # (M,T)
+    M, T = pos.shape[0], pos.shape[1]
+    if M == 0 or T < 2:
+        return np.empty((0, 3), dtype=np.float32)
+
+    # Per-track net excursion (max distance of visible samples from their centroid).
+    excursion = np.zeros(M, dtype=np.float64)
+    for m in range(M):
+        vm = vis[m]
+        if int(vm.sum()) >= 2:
+            p = pos[m][vm]
+            excursion[m] = float(np.linalg.norm(p - p.mean(axis=0), axis=1).max())
+
+    has = excursion > 0.0
+    if not has.any():
+        return np.empty((0, 3), dtype=np.float32)
+    # Threshold = max(percentile of net excursions, net floor). >= so that on small
+    # track sets (percentile can equal the max excursion) the genuinely moving tracks

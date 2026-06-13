@@ -58,3 +58,17 @@ export function PlaybackDriver() {
 
     const staticPointCount = scene?.static?.count ?? 0;
     const dynamicFrame = scene?.dynamic?.frames[t];
+    const dynamicPointCount = dynamicFrame ? dynamicFrame.count : 0;
+    const frameIndex = frameCount > 1 ? Math.round(time * (frameCount - 1)) : 0;
+
+    const q = camera.quaternion;
+    window.__mayaviusDebug = {
+      staticPointCount,
+      dynamicPointCount,
+      frameIndex,
+      cameraQuaternion: [q.x, q.y, q.z, q.w],
+    };
+  });
+
+  return null;
+}

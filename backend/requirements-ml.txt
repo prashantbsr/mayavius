@@ -1,17 +1,49 @@
-# DEFERRED — heavy ML dependencies. NOT installed during scaffolding (multi-GB).
+# DEFERRED — heavy ML dependencies (multi-GB; NEVER-committed weights). NOT part of
+# the lightweight `make test` path: only the on-device MPS smoke (spec/10 §5,
+# T-500/T-510/T-511) and the real `vggt+cotracker3` combo need these. Install only
+# AFTER the lightweight path works.
 #
-# Exact versions, Apple-Silicon/MPS notes and model repo IDs are RE-VERIFIED and
-# pinned in spec/08-dependencies-and-env.md BEFORE anything here is installed.
-# The model-selection task (handover §6) locks the default adapter combo first.
+# FROZEN on the 36 GB Apple-Silicon Mac (macOS 14+, Python 3.12.13), 2026-06-14, with
+# `torch.backends.mps.is_available() == True` (torch 2.12.0). Install:
+#   cd backend
+#   ./.venv/bin/pip install torch torchvision        # Mac wheels are CPU+MPS (no CUDA index URL)
+#   ./.venv/bin/pip install -r requirements-ml.txt
+#   ./.venv/bin/python -c "import torch; print(torch.__version__, torch.backends.mps.is_available())"
 #
-# Likely baseline (UNPINNED placeholders — do NOT install until verified):
-#   torch            # PyTorch with MPS backend on Apple Silicon; fp32 only (no fp16 autocast on MPS)
-#   torchvision
-#   (numpy is NOT here — it graduated to the lightweight requirements.txt because the
-#    model-agnostic core depends on it; see spec/08 §3/§4.2)
-#   opencv-python    # video decode / frame extraction
-#   huggingface-hub  # pull model weights (e.g. VGGT-1B-Commercial)
-#   einops
+# NUMPY RECONCILIATION (logged): `requirements.txt` pins numpy>=2,<3 for the no-ML
+# CI core, but **vggt 0.0.1 requires numpy<2**, so installing this ML overlay
+# downgrades numpy to **1.26.4**. This is verified byte-compatible: the full no-ML
+# suite (incl. T-200 golden-fixture byte-stability — the quantization-critical test)
+# passes identically on numpy 1.26.4 and 2.4.6 (numpy.rint round-half-even is stable
+# across versions). The no-ML CI machine keeps numpy 2.x; the ML machine uses 1.26.4.
 #
-# Model-specific deps (vggt / cotracker3 / spatialtracker_v2) are added per the
-# selected adapter(s) in spec/08-dependencies-and-env.md.
+# MPS DISCIPLINE (spec/08 §5, C3): adapters set PYTORCH_ENABLE_MPS_FALLBACK=1 BEFORE
+# importing torch; device from request.device (default "mps"); dtype FP32 (no fp16
+# autocast — by choice, the VGGT MPS community-port pattern).
+
+# --- PyTorch (Apple-Silicon / MPS wheels; CPU+MPS, no CUDA index URL on macOS) ----
+torch==2.12.0
+torchvision==0.27.0
+
+# --- numpy: pinned <2 by vggt (see RECONCILIATION above); exact resolved version ---
+numpy==1.26.4
+
+# --- Shared ML utilities (spec/08 §4.2) — exact resolved versions ------------------
+opencv-python==4.11.0.86   # video decode → frames (cv2.VideoCapture; pipeline/decode.py primary)
+imageio==2.37.3            # robust short-clip decode fallback for awkward containers
+imageio-ffmpeg==0.6.0      # bundled ffmpeg binary for imageio
+huggingface-hub==1.19.0    # pull model weights (facebook/VGGT-1B)
+einops==0.8.2
+safetensors==0.8.0         # VGGT checkpoint format
+hf-transfer==0.1.9         # optional: faster parallel weight downloads (HF_HUB_ENABLE_HF_TRANSFER=1)
+
+# --- VGGT (static reconstructor — default; spec/08 §4.3) — frozen git sha ----------
+# `from vggt.models.vggt import VGGT`; weights facebook/VGGT-1B (cc-by-nc-4.0, NOT gated).
+vggt @ git+https://github.com/facebookresearch/vggt.git@a288dd0f14786c93483e45524328726ab7b1b4ce
+
+# --- CoTracker3 (2D tracker → 3D via VGGT depth — default; spec/08 §4.4) -----------
+# NOT a pip dist → never in `pip freeze`. A torch.hub RUNTIME pull (weights repo
+# facebook/cotracker3, cc-by-nc-4.0; first run needs network or a warmed
+# ~/.cache/torch/hub). Resolved hub commit, frozen for reproducibility (DoD §9.5):
+#   torch.hub.load("facebookresearch/co-tracker", "cotracker3_offline")
+# cotracker3: torch.hub facebookresearch/co-tracker @ 82e02e8029753ad4ef13cf06be7f4fc5facdda4d (runtime pull)

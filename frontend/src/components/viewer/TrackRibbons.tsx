@@ -28,3 +28,33 @@ import { timeToFrame } from "@/lib/viewer/buildScene";
 //
 // Render-path decoupling (spec/07 §1): reads playback `time` from the store via
 // `getState()` inside useFrame (no per-frame re-render); `scene` is a prop. The
+// group is CONSTRUCTED in useMemo and handed to <primitive>; every mutation goes
+// through the `<primitive ref>` (`groupRef.current`), so render stays pure.
+
+const DEFAULT_LINE_WIDTH_PX = 2.5;
+const GOLDEN_ANGLE_DEG = 137.508;
+
+/** Per-run growth metadata stashed on each Line2's `userData` so it travels
+ * with the captured group object (mutated only through the ref). */
+interface RunMeta {
+  startFrame: number;
+  segmentCount: number; // points-1 → max drawable segments
+}
+
+/** Stable per-track color: `tracks.colors` iff present, else a golden-angle hue
+ * from the track index so ribbons read as distinct trajectories (spec/07 §2.2). */
+function trackColor(scene: Mv4dScene, m: number, out: THREE.Color): THREE.Color {
+  const c = scene.tracks?.colors;
+  if (c) {
+    return out.setRGB(
+      c[m * 3 + 0] / 255,
+      c[m * 3 + 1] / 255,
+      c[m * 3 + 2] / 255,
+      THREE.SRGBColorSpace,
+    );
+  }
+  const hue = ((m * GOLDEN_ANGLE_DEG) % 360) / 360;
+  return out.setHSL(hue, 0.7, 0.6);
+}
+
+/** Split every track into contiguous visible runs and build one Line2 per run

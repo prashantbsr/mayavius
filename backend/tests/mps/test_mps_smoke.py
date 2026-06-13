@@ -58,3 +58,33 @@ def _skip_reason() -> str | None:
         return "no MPS backend (torch.backends.mps.is_available() is False) (spec/10 §5)"
     return None
 
+
+# Evaluate the gate once at import; both skipif blocks below share it.
+_SKIP = _skip_reason()
+
+
+def _torch_version_tuple(version: str) -> tuple[int, int, int]:
+    """Parse e.g. '2.12.0', '2.12.0+cpu', '2.5.0a0' → (2, 12, 0)."""
+    head = version.split("+", 1)[0]
+    parts: list[int] = []
+    for piece in head.split(".")[:3]:
+        num = ""
+        for ch in piece:
+            if ch.isdigit():
+                num += ch
+            else:
+                break
+        parts.append(int(num) if num else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    return (parts[0], parts[1], parts[2])
+
+
+def _peak_mps_gb() -> float | None:
+    """Best-effort MPS peak allocation in GiB (driver-allocated, else current).
+
+    ``torch.mps.driver_allocated_memory`` / ``current_allocated_memory`` exist on
+    recent torch; absent → ``None`` (recorded, not a gate).
+    """
+    try:
+        import torch

@@ -388,3 +388,33 @@ def test_assemble_returns_raw_scene_does_not_cap() -> None:
 
 def test_assemble_fallback_to_sparse_when_vggt_empty() -> None:
     """If VGGT per-frame maps are unusable, dynamic = sparse moving track points only."""
+    S = 3
+    # All-NaN VGGT world points -> unusable -> fallback path.
+    world_points = np.full((S, 2, 2, 3), np.nan, dtype=np.float32)
+    conf = np.zeros((S, 2, 2), dtype=np.float32)
+    depth = np.ones((S, 2, 2), np.float32)
+    geo = GeometryResult(
+        world_points=world_points,
+        world_points_conf=conf,
+        depth=depth,
+        depth_conf=depth,
+        camera=CameraTrack(
+            poses=np.tile(np.array([0, 0, 0, 1, 0, 0, 0], np.float32), (S, 1)),
+            intrinsics=np.tile(np.array([1.0, 1.0, 0.5, 0.5], np.float32), (S, 1)),
+        ),
+    )
+    # A clearly-moving track.
+    tpos = np.zeros((1, S, 3), dtype=np.float32)
+    for t in range(S):
+        tpos[0, t] = np.array([10.0 * t, 0.0, 0.0], dtype=np.float32)
+    tr = TrackResult(
+        positions=tpos,
+        visibility=np.ones((1, S), bool),
+        colors=np.array([[1, 2, 3]], np.uint8),
+    )
+    request = ReconstructionRequest(video_path="/tmp/x.mp4", max_frames=24, target_fps=12.0)
+    scene = assemble_scene4d(geo, tr, request)
+
+    # Sparse dynamic: at least one frame has the moving track point.
+    total_dyn = sum(p.shape[0] for p in scene.dynamic_positions)
+    assert total_dyn >= 1

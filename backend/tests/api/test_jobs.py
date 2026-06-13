@@ -298,3 +298,20 @@ def test_default_combo_adapter_contract_mps() -> None:
     )
     if not sample.exists():
         pytest.skip(f"no on-device sample clip at {sample} (corpus is W4)")
+
+    adapter = VggtCoTracker3Adapter(settings)
+    assert adapter.info.weights_license  # D2
+    req = ReconstructionRequest(video_path=str(sample), max_frames=8, target_fps=12.0)
+    scene = adapter.reconstruct(req)
+
+    assert isinstance(scene, Scene4D)
+    assert 1 <= scene.frame_count <= 64
+    assert scene.static_positions.shape[1] == 3
+    assert scene.static_positions.shape[0] <= 150_000
+    assert len(scene.dynamic_positions) == scene.frame_count
+    for frame in scene.dynamic_positions:
+        assert frame.shape[0] <= 20_000
+    if scene.tracks is not None:
+        assert scene.tracks.positions.shape[0] <= 4_096
+        assert scene.tracks.positions.shape[1] == scene.frame_count
+        assert scene.tracks.positions.shape[2] == 3

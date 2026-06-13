@@ -268,3 +268,33 @@ def _synthetic_geo_and_tracks(seed: int = 3):
 
     # Tracks: M=2. Track 0 follows the moving cluster center (big displacement);
     # track 1 sits on a fixed plane point (no motion).
+    M = 2
+    tpos = np.zeros((M, S, 3), dtype=np.float32)
+    for t in range(S):
+        tpos[0, t] = centers[t]            # moving
+        tpos[1, t] = np.array([2.0, 2.0, 0.0], dtype=np.float32)  # stationary plane pt
+    tvis = np.ones((M, S), dtype=bool)
+    tcol = np.array([[255, 0, 0], [100, 100, 100]], dtype=np.uint8)
+    tr = TrackResult(positions=tpos, visibility=tvis, colors=tcol)
+    return geo, tr, S, centers
+
+
+def test_assemble_splits_moving_into_dynamic_rest_into_static() -> None:
+    """The moving cluster lands in dynamic_positions; the static plane in static_positions."""
+    geo, tr, S, centers = _synthetic_geo_and_tracks()
+    request = ReconstructionRequest(video_path="/tmp/x.mp4", max_frames=24, target_fps=12.0)
+
+    scene = assemble_scene4d(geo, tr, request, motion_thresh=0.95)
+
+    assert isinstance(scene, Scene4D)
+    assert scene.frame_count == S
+    assert len(scene.dynamic_positions) == S
+    assert len(scene.dynamic_colors) == S
+
+    # Every frame's moving cluster (8 points near its center) is in dynamic_positions.
+    for t in range(S):
+        dyn = scene.dynamic_positions[t]
+        assert dyn.shape[0] > 0, f"frame {t} has no dynamic points"
+        # Dynamic points are near the moving center, not on the z=0 plane.
+        d_to_center = np.linalg.norm(dyn - centers[t][None, :], axis=1)
+        assert np.all(d_to_center < 1.0), (t, d_to_center.max())

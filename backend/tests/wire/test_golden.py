@@ -28,3 +28,33 @@ from pathlib import Path
 import numpy as np
 
 from app.wire.decoder import decode
+from app.wire.encoder import encode_reconstruction
+from tests.wire._golden import golden_scene
+
+_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
+_GOLDEN_PATH = _FIXTURES / "golden_scene.mv4d"
+_TINY_PATH = _FIXTURES / "tiny.mv4d"
+
+
+# --------------------------------------------------------------------------- #
+# T-200 — the committed golden fixture is byte-for-byte canonical
+# --------------------------------------------------------------------------- #
+def test_golden_fixture_is_canonical():
+    """T-200: encode(golden_scene()) == the committed golden_scene.mv4d bytes.
+
+    Byte-stability anchor (spec/05 §7 / spec/10 §2): if the encoder ever changes
+    its output, this fails until the committed fixture AND decoder.ts are updated
+    together in the same commit.
+    """
+    assert _GOLDEN_PATH.exists(), (
+        f"missing committed golden fixture: {_GOLDEN_PATH} "
+        "(regenerate via tests.wire._gen_fixtures)"
+    )
+    on_disk = _GOLDEN_PATH.read_bytes()
+    regenerated = encode_reconstruction(golden_scene())
+
+    assert regenerated == on_disk, (
+        "golden_scene.mv4d is stale: encode_reconstruction(golden_scene()) no "
+        f"longer matches the committed fixture (regenerated {len(regenerated)} B "
+        f"vs on-disk {len(on_disk)} B). Update the fixture AND decoder.ts in the "
+        "same commit (spec/05 §7)."

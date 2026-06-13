@@ -28,3 +28,13 @@ _ONE_LINER = (
 
 
 def test_core_imports_no_framework() -> None:
+    proc = subprocess.run(
+        [sys.executable, "-c", _ONE_LINER],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, (
+        "app.core imported a banned framework/adapter "
+        "(banned set: fastapi, starlette, torch, uvicorn, app.adapters.*, "
+        f"numpy.*cuda).\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )

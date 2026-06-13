@@ -28,3 +28,5 @@ def http_status_for(err: Exception) -> int:
     if isinstance(err, ClipTooLongError):
         return 413
     if isinstance(err, UnsupportedDeviceError):
+        return 501
+    return 500

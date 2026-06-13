@@ -28,3 +28,33 @@ def golden_scene() -> Scene4D:
         dtype=np.float32,
     )
     static_colors = np.array(
+        [[255, 0, 0], [0, 255, 0], [0, 0, 255], [128, 128, 128]], dtype=np.uint8
+    )
+    static_conf = np.array([200, 180, 160, 255], dtype=np.uint8)
+
+    # dynamic: T = 3, counts [2, 0, 1] (frame 1 empty -> pointCount==0)
+    dynamic_positions = [
+        np.array([[0.2, 0.2, 0.2], [0.8, 0.2, 0.2]], dtype=np.float32),
+        np.empty((0, 3), dtype=np.float32),
+        np.array([[0.5, 0.9, 0.1]], dtype=np.float32),
+    ]
+    dynamic_colors = [
+        np.array([[10, 20, 30], [40, 50, 60]], dtype=np.uint8),
+        np.empty((0, 3), dtype=np.uint8),
+        np.array([[70, 80, 90]], dtype=np.uint8),
+    ]
+
+    # tracks: M = 2, T = 3 (colors u8 -> HAS_TRACK_COLOR)
+    track_positions = np.array(
+        [
+            [[0.1, 0.1, 0.1], [0.15, 0.12, 0.1], [0.2, 0.14, 0.1]],
+            [[0.9, 0.9, 0.9], [0.85, 0.88, 0.9], [0.8, 0.86, 0.9]],
+        ],
+        dtype=np.float32,
+    )
+    track_visibility = np.array(
+        [[True, True, False], [False, True, True]], dtype=bool
+    )
+    track_colors = np.array([[200, 10, 10], [10, 200, 10]], dtype=np.uint8)
+    tracks = Tracks(
+        positions=track_positions,

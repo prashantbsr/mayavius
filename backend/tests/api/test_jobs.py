@@ -208,3 +208,33 @@ def test_adapter_contract(adapter_factory) -> None:
         ("app.adapters.spatialtracker_adapter", "SpatialTrackerV2Adapter"),
         ("app.adapters.pi3_adapter", "Pi3Adapter"),
         ("app.adapters.open_d4rt_adapter", "OpenD4RTAdapter"),
+    ],
+)
+def test_optional_adapters_refuse_mps(module_name, class_name) -> None:
+    import importlib
+
+    from app.core.domain.errors import UnsupportedDeviceError
+
+    cls = getattr(importlib.import_module(module_name), class_name)
+    adapter = cls(settings)
+    # info is cheap + license-tagged even though reconstruct refuses the Mac device.
+    assert adapter.info.weights_license
+    assert adapter.info.mps_capable is False
+    # Default device is "mps" (the Mac local path) — the honest stub refuses it.
+    req = ReconstructionRequest(video_path="(ignored)", max_frames=4)
+    with pytest.raises(UnsupportedDeviceError):
+        adapter.reconstruct(req)
+
+
+# The two default-combo adapters (W3.T2/T3) MUST stay importable WITHOUT torch — the
+# module import (registry/info path) never imports torch/vggt/cotracker; only
+# reconstruct()/run_geometry()/run_tracks() do, lazily (T-130, spec/06 §4). This is
+# the no-ML guarantee that the API can advertise capabilities with zero ML deps.
+@pytest.mark.parametrize(
+    "module_name, class_name",
+    [
+        ("app.adapters.vggt_adapter", "VggtAdapter"),
+        ("app.adapters.cotracker3_adapter", "CoTracker3Adapter"),
+    ],
+)
+def test_default_adapters_module_import_is_torch_free(module_name, class_name) -> None:

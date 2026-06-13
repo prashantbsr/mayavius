@@ -28,3 +28,33 @@ from app.core.ports.reconstruction_port import (
     ProgressSink,
     ReconstructionPort,
 )
+from app.pipeline.assemble import assemble_scene4d
+from app.pipeline.decode import cap_frames_to_token_budget, decode_and_subsample
+
+
+class VggtCoTracker3Adapter(ReconstructionPort):
+    name = "vggt+cotracker3"
+
+    def __init__(self, settings=None) -> None:
+        self._settings = settings
+        # Sub-adapters constructed LAZILY (first use) so importing/constructing the
+        # combo never imports torch/vggt/cotracker (T-130, spec/06 §4).
+        self._vggt = None
+        self._cot = None
+
+    @property
+    def info(self) -> AdapterInfo:
+        return AdapterInfo(
+            name="vggt+cotracker3",
+            produces_tracks=True,
+            dynamic=True,
+            mps_capable=True,
+            weights_license="cc-by-nc-4.0",
+            default_weights="facebook/VGGT-1B + facebook/cotracker3",
+        )
+
+    # ----------------------------------------------------------- lazy sub-adapters
+    def _vggt_adapter(self):
+        """Lazily construct + cache the VGGT half (no torch at construction)."""
+        if self._vggt is None:
+            from app.adapters.vggt_adapter import VggtAdapter  # lazy

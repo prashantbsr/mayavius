@@ -328,3 +328,33 @@ def assemble_scene4d(
         int(all_dyn.shape[0]),
         int(tr_pos.shape[0]),
         radius,
+        voxel,
+        motion_floor,
+        fallback_used,
+    )
+    return scene
+
+
+def _moving_nodes_at(tr: TrackResult, t: int, motion_thresh_pct: float, abs_floor: float) -> np.ndarray:
+    """Boolean ``(M,)`` mask: tracks whose sample at frame ``t`` is moving (fallback path)."""
+    pos = np.asarray(tr.positions, dtype=np.float32)
+    vis = np.asarray(tr.visibility, dtype=bool)
+    M, T = pos.shape[0], pos.shape[1]
+    if M == 0 or T < 2:
+        return np.zeros((M,), dtype=bool)
+    disp = np.linalg.norm(pos[:, 1:, :] - pos[:, :-1, :], axis=2)  # (M,T-1)
+    both_vis = vis[:, 1:] & vis[:, :-1]
+    valid = disp[both_vis]
+    pct = float(np.percentile(valid, motion_thresh_pct * 100.0)) if valid.size else 0.0
+    thresh = max(pct, float(abs_floor))
+    moving_seg = both_vis & (disp >= thresh) & (disp > 0.0)
+    node = np.zeros((M, T), dtype=bool)
+    node[:, :-1] |= moving_seg
+    node[:, 1:] |= moving_seg
+    node &= vis
+    return node[:, t]
+
+
+def _normalize_conf_u8(conf: np.ndarray) -> np.ndarray:
+    """Per-scene min-max normalize confidence → uint8 ``[0,255]`` (spec/06 §5 step 6 note).
+

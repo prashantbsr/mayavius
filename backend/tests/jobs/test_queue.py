@@ -178,3 +178,33 @@ def test_seed_example_registers_done_job(tmp_path):
 
 
 class _RaisingAdapter(ReconstructionPort):
+    """A ReconstructionPort whose reconstruct() raises a typed ReconstructionError."""
+
+    name = "raising"
+
+    @property
+    def info(self) -> AdapterInfo:
+        return AdapterInfo(
+            name="raising",
+            produces_tracks=False,
+            dynamic=False,
+            mps_capable=True,
+            weights_license="none",
+            default_weights="(none)",
+        )
+
+    def reconstruct(self, request, progress=None) -> Scene4D:
+        raise InferenceError("the model exploded mid-run")
+
+
+def test_reconstruction_error_yields_failed_with_code(tmp_path):
+    """A service that raises ReconstructionError → job FAILED with error.code."""
+    queue = _make_queue(tmp_path, adapter=_RaisingAdapter())
+
+    async def scenario() -> Job:
+        job_id = await queue.submit("/tmp/clip.mp4", _request())
+        return await _drive_to_terminal(queue, job_id)
+
+    job = asyncio.new_event_loop().run_until_complete(scenario())
+
+    assert job.status is JobStatus.FAILED

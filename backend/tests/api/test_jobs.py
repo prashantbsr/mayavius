@@ -268,3 +268,33 @@ def test_default_adapters_module_import_is_torch_free(module_name, class_name) -
 # the full smoke (wall-time / peak-mem record, ≥1 static point, ≥1 track, encodes
 # within caps) lives in T-510 (backend/tests/mps/test_mps_smoke.py, on-device).
 def _mps_smoke_enabled() -> bool:
+    import os
+
+    if os.environ.get("MAYAVIUS_RUN_MPS_SMOKE") != "1":
+        return False
+    try:
+        import torch
+
+        return bool(torch.backends.mps.is_available())
+    except Exception:
+        return False
+
+
+@pytest.mark.mps
+@pytest.mark.skipif(
+    not _mps_smoke_enabled(),
+    reason="needs MAYAVIUS_RUN_MPS_SMOKE=1 + torch MPS (spec/10 §5); on-device T-510",
+)
+def test_default_combo_adapter_contract_mps() -> None:
+    """T-310 (gated): the real combo returns a caps-honoring mayavius-space Scene4D."""
+    from pathlib import Path
+
+    from app.adapters.combo import VggtCoTracker3Adapter
+    from app.core.domain.models import Scene4D
+
+    # A bundled ≤3s sample clip (spec/10 §6) decoded by the combo itself.
+    sample = (
+        Path(__file__).resolve().parents[3] / "assets" / "samples" / "static-scene.mp4"
+    )
+    if not sample.exists():
+        pytest.skip(f"no on-device sample clip at {sample} (corpus is W4)")

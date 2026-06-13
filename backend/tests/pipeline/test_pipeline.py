@@ -328,3 +328,33 @@ def test_assemble_splits_moving_into_dynamic_rest_into_static() -> None:
     all_pts.append(scene.tracks.positions.reshape(-1, 3))
     allp = np.concatenate(all_pts, axis=0)
     assert np.all(scene.aabb_min <= allp.min(axis=0) + 1e-5)
+    assert np.all(scene.aabb_max >= allp.max(axis=0) - 1e-5)
+
+
+def test_assemble_returns_raw_scene_does_not_cap() -> None:
+    """assemble returns a RAW Scene4D — enforce_caps (called separately) is the capper.
+
+    Build an over-cap geometry (a frame with > 20k dynamic points). assemble must NOT
+    cap it (so a frame exceeds the per-frame dynamic cap); enforce_caps THEN brings it
+    under cap — proving the two stages are distinct and assemble is raw.
+    """
+    S = 2
+    n_dyn = 25_000  # > 20k dynamic cap
+    rng = np.random.default_rng(5)
+
+    # All-moving cluster: every VGGT point sits near a moving track sample, so the
+    # split puts (essentially) all of them in dynamic_positions, exceeding the cap.
+    centers = [np.array([0.0, 0.0, 0.0], np.float32), np.array([50.0, 0.0, 0.0], np.float32)]
+    world_points = np.zeros((S, 1, n_dyn, 3), dtype=np.float32)
+    colors = np.zeros((S, 1, n_dyn, 3), dtype=np.uint8)
+    conf = rng.random((S, 1, n_dyn)).astype(np.float32)
+    for t in range(S):
+        world_points[t, 0] = centers[t][None, :] + (rng.random((n_dyn, 3)).astype(np.float32) - 0.5) * 0.2
+        colors[t, 0] = 200
+    depth = np.ones((S, 1, n_dyn), np.float32)
+    geo = GeometryResult(
+        world_points=world_points,
+        world_points_conf=conf,
+        depth=depth,
+        depth_conf=depth,
+        camera=CameraTrack(

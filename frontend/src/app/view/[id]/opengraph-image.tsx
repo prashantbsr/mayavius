@@ -58,3 +58,20 @@ export default async function Image({ params }: Props) {
           }}
         >
           interactive 4D scene reconstruction
+        </div>
+        <div
+          style={{
+            display: "flex",
+            marginTop: 20,
+            fontSize: 28,
+            opacity: 0.55,
+            fontFamily: "monospace",
+          }}
+        >
+          /view/{id}
+        </div>
+      </div>
+    ),
+    { ...size },
+  );
+}

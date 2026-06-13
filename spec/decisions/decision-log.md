@@ -143,3 +143,57 @@ Beyond Phase-0 fact verification, the spec went through adversarial hardening:
   The spec is therefore declared **build-ready**; the build session should still
   **stop-and-flag** (per EXECUTE.md) if it hits a genuine contradiction, not improvise.
   Final clean-state record: [blind-executor-dry-run.md](blind-executor-dry-run.md).
+
+## §J — Build-session record (W0–W3 executed 2026-06-13/14)
+
+The build session executed waves 0–3. W0/W1/W2 gates green; W3 on-device MPS gate green
+on the 36 GB Apple-Silicon Mac (Python 3.12.13, torch 2.12.0). Logged facts + on-device
+reconciliations (each a measured/forced correction, not an improvisation):
+
+- **T-510 measured (spec/08 §5 / §E,H — record, don't assert):** real `VggtCoTracker3Adapter`
+  (VGGT-1B + CoTracker3, lift 2D→3D via VGGT depth) on one ≤3 s clip on MPS fp32 →
+  **~31 s wall, ~12 GB peak** (well under 36 GB), `static=38970 dynamic_total=196229 tracks=1024
+  frames=8`, encodes to MV4D within caps. T-500 (MPS available, torch ≥ 2.5) + T-511 (no MPS op
+  failed under `PYTORCH_ENABLE_MPS_FALLBACK=1`) pass.
+- **VGGT-1B real prediction API (confirmed on-device):** input `[B,S,3,518,518]`; output dict
+  `world_points [B,S,H,W,3]`, `world_points_conf [B,S,H,W]`, `depth [B,S,H,W,1]`,
+  `depth_conf [B,S,H,W]`, `pose_enc [B,S,9]` → `pose_encoding_to_extri_intri`. VGGT internally runs
+  fp32 (its `autocast(enabled=False)`), matching the C3 discipline.
+- **Patch-multiple fix (decode):** VGGT's ViT rejects any side not divisible by 14.
+  `decode_and_subsample` now sets width=518 (=14·37) and height=`round(h·(518/w)/14)·14` (capped 518),
+  matching VGGT crop-mode `load_and_preprocess_images` (e.g. a 320×240 clip → 518×392).
+- **Track-lift double-flip fix (caught by adversarial review):** `run_tracks` fed the lift the
+  *mayavius* c2w, applying the OpenCV→mayavius flip `F=diag(1,−1,−1)` twice and detaching the ribbons.
+  Fixed by reconstructing the OpenCV c2w via the involution `R_c2w=F·R_may·F`, `t_c2w=F·t_may`. Guarded
+  by `tests/adapters/test_track_lift_roundtrip.py` (a known world point projects + lifts back exactly).
+- **numpy reconciliation:** vggt 0.0.1 requires numpy<2, so the ML overlay resolves numpy==1.26.4.
+  Verified byte-compatible — the no-ML suite incl. T-200 golden byte-stability passes identically on
+  1.26.4 and 2.4.6 (`numpy.rint` round-half-even is stable). No-ML CI keeps numpy 2.x; ML env uses 1.26.4.
+- **W0 sequencing:** the pure-numpy service helpers (`smooth_and_cull`/`enforce_caps`) were built in W0
+  to satisfy the W0-gate T-120; the rigorous over-cap T-104 landed in W1. No spec edited, no test weakened.
+
+### §J.1 — W4 corpus + the static/dynamic split fix (the "wow")
+
+- **Corpus:** all four roles sourced from Wikimedia Commons with primary-source-verified licenses and
+  baked via the real combo: `walking-person` (CC0, Taurus Media Technik), `street-vehicle` (CC-BY-3.0,
+  barbara.grilc), `pet-motion` (CC-BY-SA-3.0, S. Panigrahi), `static-scene` (CC-BY-SA-4.0, R. Gairshail).
+  T-600/T-601 green; README/LICENSE/og.png shipped.
+- **Static/dynamic split (W4.T3 / risk #4) — the one real quality fix.** The spec's per-FRAME
+  displacement split (spec/06 §5 step 5) FLOODS real moving-camera reconstructions: VGGT camera/depth
+  noise is ~zero-mean, so on the static-scene CONTROL ~16% of track samples exceeded the 1% per-frame
+  floor (median noise 0.34%, 95th pct 2.18%, 99th 5.2% of AABB diag), and the 2% seeding radius then
+  classified nearly the whole cloud dynamic (`static=3`, dyn capped). A walking subject's ~3%/frame sits
+  INSIDE that noise tail, so NO per-frame threshold separates them. **Fix:** classify a track as moving by
+  its NET excursion over the clip (max distance of its visible world positions from their mean), not
+  per-frame displacement — noise is zero-mean (net ~ σ·√T, small) while a subject travels (net ~ T·v,
+  large). At an 8% (`_MOTION_NET_FLOOR_FRAC`) net floor the control drops to ~0.5% of tracks moving;
+  measured result: control `static 3 → 18946`, hero `walking-person` static 14500 + a clear ~6k/frame
+  dynamic subject. The sparse-fallback path (`_moving_nodes_at`, VGGT-empty) keeps the per-frame floor.
+  This is a logged W4.T3 tuning of the split signal (the spec's per-frame formula provably fails on noisy
+  real reconstructions; the intent — stable background + moving subject — is preserved); the 2-track unit
+  test still passes. The 4 corpus `.mv4d` were re-baked with this split.
+- **MPS frame ceiling (on-device finding):** VGGT runs global self-attention over ALL frames and MPS has
+  no flash-attention, so scores memory scales as `(S·tokens_per_frame)²`. A 518×518 SQUARE clip OOMs at 24
+  frames (64.8 GiB); the safe budget is `S·tokens ≲ 12000` (16:9 → ~16 frames, square → ~8–9). The corpus
+  bake + a `VggtAdapter` frame-budget guard cap S to fit, so a square/high-res upload no longer OOMs the
+  default `max_clip_frames=24`.

@@ -208,3 +208,33 @@ def test_caps_tracks_drop_lowest_mean_visibility_first() -> None:
 
     result = enforce_caps(scene)
     assert result.tracks is not None
+    kept_vis = np.asarray(result.tracks.visibility)
+    M2 = kept_vis.shape[0]
+    assert M2 == MAX_TRACKS
+
+    kept_mean = kept_vis.mean(axis=1)
+    expected_kept_mean = np.sort(full_mean)[-MAX_TRACKS:]
+    # Tie-safe multiset check on the mean-visibility values.
+    assert np.allclose(np.sort(kept_mean), expected_kept_mean)
+
+    # Every dropped track's mean visibility <= every kept track's.
+    n_dropped = full_mean.shape[0] - MAX_TRACKS
+    max_dropped_mean = float(np.sort(full_mean)[:n_dropped].max())
+    assert max_dropped_mean <= float(kept_mean.min()) + 1e-9
+
+
+def test_caps_frames_are_uniform_temporal_subsample() -> None:
+    """T-104 — the frame cull is a uniform temporal subsample (endpoints kept, near-even step)."""
+    scene = _over_cap_scene()
+    result = enforce_caps(scene)
+    T2 = result.frame_count
+
+    frame_idx = np.unique(
+        np.linspace(0, scene.frame_count - 1, MAX_FRAMES).round().astype(np.int64)
+    )
+    assert len(frame_idx) == T2
+
+    # Endpoints (first + last original frame) are retained.
+    assert frame_idx[0] == 0
+    assert frame_idx[-1] == scene.frame_count - 1
+

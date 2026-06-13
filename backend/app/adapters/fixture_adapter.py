@@ -178,3 +178,33 @@ def _build_scene(t: int, *, fps: float) -> Scene4D:
     )
 
     # --- cameras: identity rotation (xyzw), slowly translating, normalized intrinsics. ---
+    poses = np.zeros((t, 7), dtype=np.float32)
+    poses[:, 3] = 1.0  # w of the xyzw quaternion -> identity rotation
+    poses[:, 4] = np.linspace(0.0, 0.2, t, dtype=np.float32)  # tx pan
+    intrinsics = np.tile(
+        np.array([1.2, 1.2, 0.5, 0.5], dtype=np.float32), (t, 1)
+    )
+    cameras = CameraTrack(poses=poses, intrinsics=intrinsics)
+
+    # --- AABB over ALL positions (static + dynamic + tracks); float32 (spec/05 §2). ---
+    all_pts = [static_positions, track_positions.reshape(-1, 3)]
+    for p in dynamic_positions:
+        if p.shape[0] > 0:
+            all_pts.append(p)
+    stacked = np.concatenate(all_pts, axis=0)
+    aabb_min = stacked.min(axis=0).astype(np.float32)
+    aabb_max = stacked.max(axis=0).astype(np.float32)
+
+    return Scene4D(
+        frame_count=t,
+        fps=fps,
+        aabb_min=aabb_min,
+        aabb_max=aabb_max,
+        static_positions=static_positions,
+        static_colors=static_colors,
+        static_conf=static_conf,
+        dynamic_positions=dynamic_positions,
+        dynamic_colors=dynamic_colors,
+        tracks=tracks,
+        cameras=cameras,
+    )

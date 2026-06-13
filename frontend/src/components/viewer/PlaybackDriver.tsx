@@ -28,3 +28,33 @@ import "@/types/debug";
 
 export function PlaybackDriver() {
   const camera = useThree((state) => state.camera);
+
+  useFrame((_, delta) => {
+    const s = useViewerStore.getState();
+    const scene = s.scene;
+
+    // ── 1. Advance time (only when playing, not frozen, scene loaded). ──────────
+    if (s.isPlaying && !s.frozen && scene) {
+      const T = s.frameCount;
+      const fps = scene.fps > 0 ? scene.fps : DEFAULT_FPS_FALLBACK;
+      const dt = (delta * fps) / Math.max(T - 1, 1); // normalized advance / sec
+      let next = s.time + dt;
+      if (next >= 1) {
+        if (s.loop) {
+          next = next % 1;
+        } else {
+          next = 1;
+          s.pause();
+        }
+      }
+      s.setTime(next); // cheap single-field transient write (spec/07 §4.2)
+    }
+
+    // ── 2. Publish the debug surface (EXACT field names, spec/07 §4.4). ─────────
+    // Re-read time: the advance above may have changed it this same frame.
+    const time = useViewerStore.getState().time;
+    const frameCount = s.frameCount;
+    const t = timeToFrame(time, frameCount);
+
+    const staticPointCount = scene?.static?.count ?? 0;
+    const dynamicFrame = scene?.dynamic?.frames[t];

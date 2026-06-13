@@ -87,3 +87,67 @@ Command: `make test-frontend && make test-e2e`.
 
 ---
 
+## Wave 3 — ML adapters on MPS (the on-device gate) — **needs the 36 GB Mac**
+
+Install ML deps (`spec/08 §4` install-then-freeze) only now. Build the default combo
+and prove it on MPS. The optional CUDA/no-MPS adapters are written as **honest
+stubs** that raise `UnsupportedDeviceError` on MPS (not silent failures).
+
+| Task | Files | Acceptance | Verify |
+|------|-------|-----------|--------|
+| **W3.T1 Pipeline utils** | `backend/app/pipeline/{decode,lift,assemble,quantize}.py` (`decode_and_subsample`; the §5 step 4 2D→3D lift formula; `assemble_scene4d(geo,tr,request)→RAW Scene4D`; AABB/quantize — kept out of adapters so adapters stay thin) + the `GeometryResult`/`TrackResult` structs ([06 §4.5a](06-backend-spec.md)) | decode→subsample→width-518 frames; lift unprojects (u_px,v_px)+depth→world via the §5 step 4 formula + §4.1a axis-flip; `assemble_scene4d` does **raw assembly only** (no split/cull); helpers pure (numpy/opencv), no FastAPI | unit (decode/lift on a tiny fixture clip) |
+| **W3.T2 VggtAdapter** | `backend/app/adapters/vggt_adapter.py` (MPS, fp32, no cuda.autocast, `PYTORCH_ENABLE_MPS_FALLBACK=1` before torch import; weights `facebook/VGGT-1B`) | returns `Scene4D` static cloud + depth + camera in mayavius world space; `info.weights_license="cc-by-nc-4.0"` | part of `T-510` |
+| **W3.T3 CoTracker3Adapter** | `backend/app/adapters/cotracker3_adapter.py` (`torch.hub` cotracker3_offline, MPS; lift via VGGT depth) | returns `Tracks` (positions/visibility/colors); 2D→3D lift correct | part of `T-510` |
+| **W3.T4 Combo + registry wiring** | `backend/app/adapters/combo.py` (`VggtCoTracker3Adapter`), `adapters/registry.py` (default `vggt+cotracker3`), `requirements-ml.txt` (frozen pins) | combo runs VGGT once, feeds depth to the lift; `MAYAVIUS_ADAPTER=vggt+cotracker3` resolves at startup | `T-310` (gated, real adapter) |
+| **W3.T5 Optional adapters (honest stubs)** | `backend/app/adapters/{spatialtracker_adapter,pi3_adapter,open_d4rt_adapter}.py` | each sets `info.mps_capable=False` and raises `UnsupportedDeviceError` on `device∈{mps,cpu}` with a message naming the constraint (CUDA-only / no-MPS / unverified); marked `@pytest.mark.gpu`, skipped on Mac | `T-310` skip-with-reason |
+
+**W3 gate (on the 36 GB Mac, opt-in):** `T-500` (MPS available) + `T-510`
+(VGGT+CoTracker3 on one ≤3 s sample → valid `Scene4D` within caps, ≥1 track; **time
++ peak memory recorded, not asserted**) + `T-511` (any CPU-fallback op logged).
+Command: `make test-mps` (`MAYAVIUS_RUN_MPS_SMOKE=1 pytest -m mps -s`).
+
+---
+
+## Wave 4 — Corpus, launch assets, polish, optional deploy
+
+| Task | Files | Acceptance | Verify |
+|------|-------|-----------|--------|
+| **W4.T1 Sample corpus + example results** | `assets/samples/{C-1…C-4}.{mp4,json}` (CC-licensed, ≤3 s, sidecar with `source_url`/`license`), pre-baked `assets/samples/<slug>.mv4d` blobs seeded at startup via `JobQueue.seed_example` ([06 §6](06-backend-spec.md)); `.gitignore` corpus stanza ([10 §6](10-testing-strategy.md)) | 3–4 clips present, each licensed + sized per [10 §6](10-testing-strategy.md); `ExampleGallery` lists C-1..C-4, each opening a seeded `/view/<slug>` | `T-600 T-601` |
+| **W4.T2 Launch assets** | `README.md` (opens with animated GIF; "runs locally on a Mac"; "no GPU to view"; honest MIT-code/NC-weights), `LICENSE` (MIT), `frontend/public/og.png` (1200×630 static branded fallback), optional `backend/Dockerfile` (per [11 §2.2](11-deployment-and-launch.md), built from repo root; `deploy/` holds only the HF Space README/config) | README top line + GIF above the fold; LICENSE present; no weights/.venv/node_modules committed | manual ([13](13-definition-of-done.md)) |
+| **W4.T3 Aesthetics polish** | shader uniforms / point-size / color / ribbon tuning in `PointCloud.tsx`/`TrackRibbons.tsx` on **real** reconstructions (risk #4) | a real sample renders screenshot-ably (stable static bg + readable moving cluster + ribbons) | manual visual on `C-1` |
+| **W4.T4 (optional) GPU deploy** | `deploy/` HF Space (Docker, `MAYAVIUS_DEVICE=cuda`, may enable `spatialtracker_v2`), frontend env to the Space | hosted demo reachable; license-gated; **local path still works without it** | manual ([11](11-deployment-and-launch.md)) |
+
+**W4 gate / project done:** every box in [13-definition-of-done.md](13-definition-of-done.md)
+checked, incl. a full **local** E2E on a real clip on the 36 GB Mac.
+
+---
+
+## Build harness (how to run a wave — mirrored in EXECUTE.md)
+
+- **Fan out by task** within a wave (parallel subagents, in git worktrees where
+  two tasks touch disjoint files; serialize tasks that edit the same file —
+  e.g. W2.T2 and W2.T4 both touch `ViewerCanvas.tsx`/`Scene.tsx`, so order them).
+- **Adversarial code review per task:** before a task is marked done, a reviewer
+  agent checks the diff against that task's **acceptance criteria + `T-xxx`** and
+  the hexagonal import rule. A task is done only when its tests are green **and**
+  the review passes.
+- **Wave-gated transitions:** Claude may move between tasks *within* a wave
+  autonomously; **crossing a wave boundary is human-gated** (the human confirms the
+  exit gate is green before W(N+1) starts). W3 specifically requires the human to
+  run `make test-mps` on the physical 36 GB Mac.
+- **On failure:** retry the task up to 2× (fix → re-test → re-review); if still
+  failing, **stop and escalate to the human** with the failing `T-xxx` + diff — do
+  not weaken a test or the spec to pass.
+
+## Dependency graph (what unblocks what)
+
+```
+W0.T1 ─┬─> W1.T1 ─> W1.T3 ─> [W1 gate] ─> W2.* ─> [W2 gate] ─> W3.* ─> [W3 gate] ─> W4.*
+W0.T2 ─┤            W1.T2 ─┘
+W0.T3 ─┤   (W0.T4 needs T1–T3 outputs for fixtures)
+W0.T4 ─┘
+```
+Wire seam (W0.T2/T3) blocks everything that serializes/deserializes; the port
+(W0.T1) blocks the service/queue; the API (W1) blocks the viewer's real data path
+(W2 uses fixture mode until then); the viewer + service (W0–W2) are all provable
+**before** ML (W3), which is the only wave that needs the Mac's GPU/MPS + weights.

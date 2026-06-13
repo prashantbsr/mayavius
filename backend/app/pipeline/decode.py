@@ -58,3 +58,33 @@ def cap_frames_to_token_budget(
         return arr
     s, _, h, w = arr.shape
     tok = max(1, (h // patch) * (w // patch))
+    max_s = max(2, int(budget) // tok)
+    if s <= max_s:
+        return arr
+    idx = np.unique(np.linspace(0, s - 1, max_s).round().astype(np.int64))
+    logger.info(
+        "VGGT frame-budget: S=%d tokens/frame=%d (S·tok=%d > %d) -> %d frames",
+        s, tok, s * tok, budget, idx.size,
+    )
+    return arr[idx]
+
+
+def _subsample_indices(n_src: int, src_fps: float, target_fps: float, max_frames: int) -> np.ndarray:
+    """Frame indices to keep: uniform subsample to ``target_fps``, capped to ``max_frames``.
+
+    First pick every ``stride``-th source frame where ``stride = round(src_fps /
+    target_fps)`` (≥1) to hit the target playback rate, then if that still exceeds
+    ``max_frames`` uniformly subsample (``np.linspace`` endpoints-inclusive) down to
+    the cap. Returns a strictly-increasing int index array (length ≤ max_frames).
+    """
+    if n_src <= 0:
+        return np.empty((0,), dtype=np.int64)
+
+    if src_fps and src_fps > 0 and target_fps > 0 and src_fps > target_fps:
+        stride = max(1, int(round(src_fps / target_fps)))
+    else:
+        stride = 1
+    idx = np.arange(0, n_src, stride, dtype=np.int64)
+
+    cap = min(int(max_frames), _MAX_FRAMES_HARD)
+    if cap >= 1 and idx.shape[0] > cap:

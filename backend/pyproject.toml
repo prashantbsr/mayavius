@@ -7,7 +7,13 @@ requires-python = ">=3.10"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-q"
+# --strict-markers => an unknown marker fails CI (registration alone only silences
+# the warning); spec/10 §7.
+addopts = "-q --strict-markers"
+markers = [
+    "mps: requires Apple-Silicon MPS + MAYAVIUS_RUN_MPS_SMOKE=1 (skipped in CI)",
+    "gpu: requires a CUDA GPU (cloud-only; never on the Mac)",
+]
 
 [tool.ruff]
 line-length = 100

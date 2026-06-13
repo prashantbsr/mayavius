@@ -58,3 +58,33 @@ test.describe("T-405 bullet_time.orbit", () => {
     // catching up, not time advancing). Once frozen, time cannot advance, so this
     // settle is a one-time convergence, not a moving target.
     const expectedFrame = await page.evaluate(() => {
+      const s = window.__mayaviusStore?.();
+      if (!s || s.frameCount <= 1) return 0;
+      return Math.round(s.time * (s.frameCount - 1));
+    });
+    await expect
+      .poll(() => debugNumber(page, "frameIndex", -999), {
+        timeout: 5_000,
+        intervals: [50, 100],
+      })
+      .toBe(expectedFrame);
+    const frozenFrame = expectedFrame;
+    const qBefore = await cameraQuaternion(page);
+    expect(qBefore).not.toBeNull();
+
+    // ── Orbit drag over the canvas (OrbitControls stay enabled — spec/07 §5). ────
+    const canvas = page.locator("canvas").first();
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    const cx = box!.x + box!.width / 2;
+    const cy = box!.y + box!.height / 2;
+
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    // Several incremental moves so OrbitControls integrates a real rotation.
+    for (let i = 1; i <= 8; i++) {
+      await page.mouse.move(cx + i * 18, cy + i * 6, { steps: 2 });
+    }
+    await page.mouse.up();
+    // Let the loop publish the post-drag camera quaternion.
+    await page.waitForTimeout(120);

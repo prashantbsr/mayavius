@@ -60,5 +60,11 @@ app.include_router(jobs.router)
 
 @app.get("/health", tags=["meta"])
 def health() -> dict[str, str]:
-    """Liveness probe — used by the smoke test and local dev."""
-    return {"status": "ok"}
+    """Liveness probe — returns the resolved adapter's name/license + device (D2)."""
+    info = app.state.adapter_info
+    return {
+        "status": "ok",
+        "adapter": info.name,
+        "device": settings.device,
+        "weights_license": info.weights_license,
+    }

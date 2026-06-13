@@ -28,3 +28,33 @@ import { timeToFrame } from "@/lib/viewer/buildScene";
 //
 // The camera is read through the R3F store getter (`useThree((s) => s.get)`),
 // not the `useThree(camera)` hook value — so the per-frame/effect camera
+// mutations here are not flagged as modifying a hook return (and we always touch
+// the live default camera).
+
+const FIT_FOV_Y_DEG = 50;
+const FIT_PADDING = 1.3;
+const FIT_DIR = new THREE.Vector3(0.3, 0.2, 1).normalize();
+
+export function CameraRig({
+  controlsRef,
+}: {
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+}) {
+  // R3F store getter → fresh RootState (with the live default camera) on demand.
+  const getR3f = useThree((s) => s.get);
+  // Subscribe narrowly: the fit effect must re-run when a NEW scene arrives.
+  const scene = useViewerStore((s) => s.scene);
+
+  // Scratch vectors/quaternions reused across frames (no per-frame allocation).
+  const centerRef = useRef(new THREE.Vector3());
+  const tmpVec = useRef(new THREE.Vector3());
+  const tmpQuat = useRef(new THREE.Quaternion());
+
+  // ── 1. Pinned initial fit — runs once per loaded scene. ──────────────────────
+  useEffect(() => {
+    if (!scene) return;
+    const camera = getR3f().camera;
+    const [minX, minY, minZ] = scene.aabbMin;
+    const [maxX, maxY, maxZ] = scene.aabbMax;
+
+    const center = centerRef.current.set(

@@ -238,3 +238,33 @@ def assemble_scene4d(
             # frame-t color: VGGT world map has no color; derive a grayscale-ish
             # color from confidence is wrong — instead colors come from the source
             # frame in a real run. Here the per-point color is supplied by the
+            # caller via a parallel map if present; absent that we use a neutral
+            # mid-gray so the contract (dynamic_colors aligned to positions) holds.
+            col_f = _frame_colors(geo, t, finite)
+
+            d = _min_dist_to_set(pts_f, moving_samples)
+            is_dyn = d <= np.float32(radius)
+
+            dynamic_positions.append(pts_f[is_dyn].astype(np.float32))
+            dynamic_colors.append(col_f[is_dyn].astype(np.uint8))
+
+            static_chunks_p.append(pts_f[~is_dyn])
+            static_chunks_c.append(col_f[~is_dyn])
+            static_chunks_conf.append(cnf_f[~is_dyn])
+    else:
+        # ---- FALLBACK (logged): sparse moving track points as the dynamic layer,
+        #      ALL finite VGGT points as static (or empty if VGGT unusable).
+        fallback_used = True
+        for t in range(S):
+            if t < tr_pos.shape[1]:
+                node_moving = _moving_nodes_at(tr, t, motion_thresh, motion_floor)
+                dynamic_positions.append(tr_pos[node_moving, t, :].astype(np.float32))
+                dynamic_colors.append(tr_col[node_moving].astype(np.uint8))
+            else:
+                dynamic_positions.append(np.empty((0, 3), np.float32))
+                dynamic_colors.append(np.empty((0, 3), np.uint8))
+        if vggt_usable:
+            for t in range(S):
+                pts = world_points[t].reshape(-1, 3)
+                cnf = wp_conf[t].reshape(-1) if wp_conf.size else np.zeros(pts.shape[0], np.float32)
+                finite = np.isfinite(pts).all(axis=1)

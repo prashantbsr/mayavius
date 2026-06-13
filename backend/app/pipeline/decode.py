@@ -88,3 +88,33 @@ def _subsample_indices(n_src: int, src_fps: float, target_fps: float, max_frames
 
     cap = min(int(max_frames), _MAX_FRAMES_HARD)
     if cap >= 1 and idx.shape[0] > cap:
+        pick = np.linspace(0, idx.shape[0] - 1, cap).round().astype(np.int64)
+        pick = np.unique(pick)
+        idx = idx[pick]
+    return idx
+
+
+def _to_chw_rgb_518(frames_hwc_rgb: list[np.ndarray]) -> np.ndarray:
+    """Stack RGB HWC frames → ``[S, 3, H, W]`` uint8, width rescaled to 518.
+
+    Width is set to 518; height is scaled to preserve aspect ratio (rounded, ≥1).
+    Resize uses cv2 if available (area interpolation), else a numpy nearest-neighbour
+    fallback so a missing cv2 cannot crash an already-decoded (imageio) path.
+    """
+    if not frames_hwc_rgb:
+        return np.empty((0, 3, 0, _TARGET_WIDTH), dtype=np.uint8)
+
+    h0, w0 = frames_hwc_rgb[0].shape[:2]
+    # Width -> 518 (== 14*37); height -> aspect-preserving and rounded to a multiple
+    # of the ViT patch size (14), matching VGGT crop-mode preprocessing
+    # (vggt.utils.load_fn): new_h = round(h0 * (518/w0) / 14) * 14. Capped at 518 so
+    # the grid never exceeds VGGT's processed extent (portrait clips are center-fit;
+    # the landscape MVP corpus stays well under). BOTH dims divisible by 14 — the
+    # VGGT forward rejects any non-patch-multiple side (spec/06 §5 step 4).
+    new_w = _TARGET_WIDTH
+    aspect_h = h0 * (new_w / float(w0))
+    new_h = int(round(aspect_h / _PATCH)) * _PATCH
+    new_h = min(max(_PATCH, new_h), _TARGET_WIDTH)
+
+    out = np.empty((len(frames_hwc_rgb), 3, new_h, new_w), dtype=np.uint8)
+    try:

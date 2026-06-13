@@ -28,3 +28,33 @@ function slugLabel(slug: string): string {
   if (slug === "example") return "Example scene";
   if (slug in CORPUS_LABELS) return CORPUS_LABELS[slug];
   // Generic title-case fallback for any future slug added before its wiring.
+  return slug
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+export function ExampleGallery() {
+  return (
+    <section
+      aria-label="Example scenes"
+      data-testid="example-gallery"
+      className="flex w-full max-w-3xl flex-col items-center gap-4"
+    >
+      <h2 className="text-sm font-medium uppercase tracking-wide opacity-60">
+        Or open an example — no upload, no GPU
+      </h2>
+      <ul className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {EXAMPLE_SLUGS.map((slug) => (
+          <li key={slug}>
+            <Link
+              href={`/view/${slug}`}
+              data-testid={`example-card-${slug}`}
+              className="group flex flex-col overflow-hidden rounded-xl border border-foreground/15 transition-colors hover:border-foreground/50"
+            >
+              {/* W2 thumbnail = the static /og.png (spec/07 §6 step 6). Plain
+                  <img>: /og.png is a 1200x630 asset (W2.T5) served from public/. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/og.png"
+                alt={`${slugLabel(slug)} preview`}

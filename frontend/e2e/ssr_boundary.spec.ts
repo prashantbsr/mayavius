@@ -28,3 +28,22 @@ test.describe("T-407 ssr_boundary", () => {
 
     // No WebGL canvas in the server-rendered markup — it is client-only.
     expect(html).not.toContain("<canvas");
+    // The ssr:false dynamic import shows its loading fallback in the SSR output
+    // (ViewerClient.tsx `loading: () => "Loading viewer…"`).
+    expect(html).toContain("Loading viewer");
+
+    // ── Real browser: the canvas appears only after hydration ───────────────────
+    await page.goto("/view/example");
+    // Immediately after navigation the markup still has no canvas; it mounts once
+    // the client dynamically imports ViewerCanvas. Poll for it to appear.
+    await expect(page.locator("canvas")).toHaveCount(1, { timeout: 30_000 });
+
+    // And the client-only WebGL actually rendered the scene post-hydration.
+    await expect
+      .poll(() => debugNumber(page, "staticPointCount", -1), {
+        timeout: 30_000,
+        intervals: [100, 200, 300],
+      })
+      .toBeGreaterThan(0);
+  });
+});

@@ -238,3 +238,33 @@ def _synthetic_geo_and_tracks(seed: int = 3):
     conf = np.zeros((S, H, W), dtype=np.float32)
     for t in range(S):
         wp = plane.copy()
+        # Overwrite the last row of the grid with the moving cluster so each frame
+        # has a dense moving blob co-located with the moving track sample.
+        blob = centers[t][None, None, :] + (rng.random((1, W, 3)).astype(np.float32) - 0.5) * 0.1
+        wp[-1, :, :] = blob[0]
+        world_points[t] = wp
+        # Color: plane gray, blob red — so we can confirm color follows the split.
+        colors[t, :, :, :] = 100
+        colors[t, -1, :, 0] = 255
+        colors[t, -1, :, 1] = 0
+        colors[t, -1, :, 2] = 0
+        conf[t] = rng.random((H, W)).astype(np.float32)
+
+    depth = np.ones((S, H, W), dtype=np.float32)
+    depth_conf = np.ones((S, H, W), dtype=np.float32)
+    poses = np.tile(np.array([0, 0, 0, 1, 0, 0, 0], np.float32), (S, 1))
+    intr = np.tile(np.array([1.0, 1.0, 0.5, 0.5], np.float32), (S, 1))
+    camera = CameraTrack(poses=poses, intrinsics=intr)
+
+    geo = GeometryResult(
+        world_points=world_points,
+        world_points_conf=conf,
+        depth=depth,
+        depth_conf=depth_conf,
+        camera=camera,
+    )
+    # attach colors so the split carries them (the real combo does this).
+    geo.colors = colors  # type: ignore[attr-defined]
+
+    # Tracks: M=2. Track 0 follows the moving cluster center (big displacement);
+    # track 1 sits on a fixed plane point (no motion).

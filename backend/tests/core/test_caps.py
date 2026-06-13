@@ -88,3 +88,33 @@ def _over_cap_scene(*, seed: int = 1234, with_cameras: bool = True) -> Scene4D:
         else:
             n = 50
         dynamic_positions.append(rng.random((n, 3)).astype(np.float32))
+        dynamic_colors.append((rng.random((n, 3)) * 255).astype(np.uint8))
+
+    # --- tracks: 5000, each with a distinct mean visibility so the order is auditable ---
+    # Give track m a visibility fraction that increases with m (so the lowest-mean
+    # tracks are a well-defined prefix), then shuffle so kept != "first 4096".
+    visibility = np.zeros((M_OVER, T_OVER), dtype=bool)
+    for m in range(M_OVER):
+        k = int(round((m / (M_OVER - 1)) * T_OVER))  # 0..T_OVER visible samples
+        visibility[m, :k] = True
+    perm = rng.permutation(M_OVER)
+    visibility = visibility[perm]
+    track_positions = rng.random((M_OVER, T_OVER, 3)).astype(np.float32)
+    track_colors = (rng.random((M_OVER, 3)) * 255).astype(np.uint8)
+    tracks = Tracks(positions=track_positions, visibility=visibility, colors=track_colors)
+
+    cameras = (
+        CameraTrack(
+            poses=rng.random((T_OVER, 7)).astype(np.float32),
+            intrinsics=rng.random((T_OVER, 4)).astype(np.float32),
+        )
+        if with_cameras
+        else None
+    )
+
+    return Scene4D(
+        frame_count=T_OVER,
+        fps=24.0,
+        aabb_min=np.zeros(3, dtype=np.float32),
+        aabb_max=np.ones(3, dtype=np.float32),
+        static_positions=static_positions,

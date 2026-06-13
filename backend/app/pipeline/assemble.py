@@ -388,3 +388,11 @@ def _frame_colors(geo: GeometryResult, t: int, finite_mask: np.ndarray) -> np.nd
         # Accept (S,H,W,3) or (S,H*W,3) or (S,N,3).
         if arr.ndim == 4:
             cf = arr[t].reshape(-1, 3)
+        elif arr.ndim == 3:
+            cf = arr[t].reshape(-1, 3)
+        else:
+            cf = None
+        if cf is not None and cf.shape[0] == n_full:
+            return cf[finite_mask].astype(np.uint8)
+    k = int(finite_mask.sum())
+    return np.full((k, 3), 128, dtype=np.uint8)

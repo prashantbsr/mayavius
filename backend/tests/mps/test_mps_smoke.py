@@ -268,3 +268,22 @@ def test_mps_fallback_documented(caplog) -> None:
             pytest.fail(
                 f"an op failed on MPS even with PYTORCH_ENABLE_MPS_FALLBACK=1 "
                 f"({exc!r}); run this adapter on the cloud-GPU deploy (spec/11)."
+            )
+        for w in wlist:
+            msg = str(w.message)
+            if "fallback" in msg.lower() or "MPS" in msg:
+                fallback_ops.append(msg)
+
+    # Also scan captured log records for any fallback note the adapter logged.
+    for rec in caplog.records:
+        text = rec.getMessage()
+        if "fallback" in text.lower():
+            fallback_ops.append(text)
+
+    # Record the list (recorded, not asserted — verify, don't assert blind).
+    if fallback_ops:
+        print("\nmps_fallback ops (recorded, not asserted):")
+        for op in fallback_ops:
+            print(f"  - {op}")
+    else:
+        print("\nmps_fallback: none observed under PYTORCH_ENABLE_MPS_FALLBACK=1")

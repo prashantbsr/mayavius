@@ -118,3 +118,10 @@ def test_fake_adapter_satisfies_port() -> None:
 
 def test_adapter_license_tag_surfaced() -> None:
     """T-122 — the adapter's weights_license is a known non-empty tag, surfaced on the scene."""
+    adapter = FakeAdapter()
+    tag = adapter.info.weights_license
+    assert isinstance(tag, str) and tag != ""
+    assert tag == "cc-by-nc-4.0"
+
+    scene = ReconstructionService(adapter).run(_request())
+    assert scene.weights_license == tag

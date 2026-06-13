@@ -118,3 +118,8 @@ def main() -> None:
     assert len(tiny) == 98, len(tiny)
     (_BACKEND_FIXTURES / "tiny.mv4d").write_bytes(tiny)
     (_FRONTEND_FIXTURES / "tiny.mv4d").write_bytes(tiny)
+    print(f"wrote tiny.mv4d (x2): {len(tiny)} bytes")
+
+
+if __name__ == "__main__":
+    main()

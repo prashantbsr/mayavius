@@ -58,3 +58,33 @@ def _build_tiny_reverse_vector() -> bytes:
     # magic, version=1, flags=0x02, posBits=16, sectionCount=1, frameCount=2,
     # reserved0=0, fps=24.0, reserved1=0, reserved2=0
     buf += struct.pack(
+        "<4sBBBBHHfII",
+        b"MV4D",
+        1,                  # version
+        _FLAG_HAS_DYNAMIC,  # flags
+        16,                 # posBits
+        1,                  # sectionCount
+        2,                  # frameCount (T)
+        0,                  # reserved0
+        24.0,               # fps
+        0,                  # reserved1
+        0,                  # reserved2
+    )
+    assert len(buf) == 24
+
+    # ---- AABB block — 24 bytes @24 (spec/05 §3.2): min (0,0,0), max (1,1,1) ----
+    buf += struct.pack("<6f", 0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+    assert len(buf) == 48
+
+    # ---- DYNAMIC payload bytes (built first to size the directory entry) ----
+    # frameDir u32[T*2] {startPoint, pointCount} cumulative: [0,1, 1,1].
+    frame_dir = struct.pack("<4I", 0, 1, 1, 1)
+    # positions u16[2*3]. point0 world (0.25,0.25,0.25) -> q=rint(0.25*65535)=16384;
+    # point1 world (0.5,0.5,0.5) -> q=rint(0.5*65535)=32768 (round-half-even).
+    q0 = int(np.rint(0.25 * _QMAX))  # 16384
+    q1 = int(np.rint(0.5 * _QMAX))   # 32768
+    assert q0 == 16384 and q1 == 32768, (q0, q1)
+    positions = struct.pack("<6H", q0, q0, q0, q1, q1, q1)
+    # colors u8[2*3]: point0 (255,128,0), point1 (0,128,255).
+    colors = struct.pack("<6B", 255, 128, 0, 0, 128, 255)
+    dynamic_payload = frame_dir + positions + colors

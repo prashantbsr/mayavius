@@ -28,3 +28,33 @@ from app.wire.encoder import (
     _HEADER_BYTES,
     _KIND_CAMERAS,
     _KIND_DYNAMIC,
+    _KIND_STATIC,
+    _KIND_TRACKS,
+    _MAGIC,
+    _POS_BITS,
+    _QMAX,
+)
+
+__all__ = ["decode", "MV4D_VERSION"]
+
+
+def _dequantize(q: np.ndarray, aabb_min: np.ndarray, aabb_max: np.ndarray) -> np.ndarray:
+    """Inverse of the encoder quantization (spec/05 §2).
+
+    ``p = aabbMin + q/65535 * (aabbMax - aabbMin)`` in float32. ``q`` is (N, 3)
+    uint16; returns (N, 3) float32. Degenerate axes (max == min) yield ``aabbMin``
+    because every ``q`` there is 0.
+    """
+    span = (aabb_max - aabb_min).astype(np.float32)
+    qf = q.astype(np.float32)
+    return (aabb_min + qf / np.float32(_QMAX) * span).astype(np.float32)
+
+
+def decode(buffer: bytes) -> Scene4D:
+    """Decode an MV4D v1 buffer back into a ``Scene4D`` (spec/05 §3).
+
+    Validates ``magic == "MV4D"``, ``version == 1``, ``posBits == 16`` (raises
+    ``ValueError`` otherwise). Uses the section directory offsets (order-agnostic)
+    and skips unknown kinds. Optional sub-arrays (static conf, track colors) are
+    gated by flags bits 4/5.
+    """

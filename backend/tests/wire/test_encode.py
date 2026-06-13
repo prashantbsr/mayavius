@@ -208,3 +208,33 @@ def test_t101_quantization_tolerance():
 
 
 def test_t101_degenerate_axis():
+    # Z axis is degenerate (aabbMax == aabbMin) => q=0 on Z, dequant == aabbMin_z.
+    z_const = 4.2
+    pts = np.array(
+        [[0.0, 0.0, z_const], [1.0, 1.0, z_const], [0.5, 0.25, z_const]], dtype=np.float32
+    )
+    aabb_min = np.array([0.0, 0.0, z_const], dtype=np.float32)
+    aabb_max = np.array([1.0, 1.0, z_const], dtype=np.float32)
+    scene = Scene4D(
+        frame_count=1,
+        fps=12.0,
+        aabb_min=aabb_min,
+        aabb_max=aabb_max,
+        static_positions=pts,
+        static_colors=np.zeros((3, 3), np.uint8),
+        static_conf=None,
+        dynamic_positions=[np.empty((0, 3), np.float32)],
+        dynamic_colors=[np.empty((0, 3), np.uint8)],
+        tracks=None,
+        cameras=None,
+    )
+    out = decode(encode_reconstruction(scene))
+    # Degenerate Z column dequantizes exactly to aabbMin_z for every point.
+    np.testing.assert_array_equal(out.static_positions[:, 2], np.full(3, z_const, np.float32))
+
+
+# --------------------------------------------------------------------------- #
+# T-102 — header + directory invariants
+# --------------------------------------------------------------------------- #
+def test_t102_header_and_directory():
+    scene = _build_representative_scene()

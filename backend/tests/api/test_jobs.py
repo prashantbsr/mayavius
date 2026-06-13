@@ -238,3 +238,33 @@ def test_optional_adapters_refuse_mps(module_name, class_name) -> None:
     ],
 )
 def test_default_adapters_module_import_is_torch_free(module_name, class_name) -> None:
+    import subprocess
+    import sys
+
+    # Clean subprocess so torch imported by another test cannot mask a leak here.
+    code = (
+        f"import importlib, sys; m = importlib.import_module({module_name!r}); "
+        f"cls = getattr(m, {class_name!r}); "
+        "info = cls(None).info; "
+        "leaked = {k for k in sys.modules "
+        "if k.split('.')[0] in {'torch', 'vggt', 'cotracker_utils'} "
+        "or k == 'cotracker'}; "
+        "assert not leaked, leaked; "
+        "assert info.weights_license"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True
+    )
+    assert proc.returncode == 0, (
+        f"{module_name} import pulled in torch/vggt/cotracker (lazy-import violation, "
+        f"T-130).\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+
+
+# --- T-310 / T-510 (gated) — the REAL default-combo adapters on MPS --------------
+# Skipped unless MAYAVIUS_RUN_MPS_SMOKE=1 AND torch+mps are available (spec/10 §5).
+# torch / vggt / cotracker are imported INSIDE the test bodies so collection works
+# with zero ML deps. The combo runs VGGT once and feeds depth to the CoTracker3 lift;
+# the full smoke (wall-time / peak-mem record, ≥1 static point, ≥1 track, encodes
+# within caps) lives in T-510 (backend/tests/mps/test_mps_smoke.py, on-device).
+def _mps_smoke_enabled() -> bool:

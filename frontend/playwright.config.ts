@@ -58,3 +58,15 @@ export default defineConfig({
       url: "http://localhost:8000/health",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
+    },
+    {
+      command: "npm run dev",
+      url: "http://localhost:3000",
+      reuseExistingServer: !process.env.CI,
+      env: {
+        NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000",
+        NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+      },
+    },
+  ],
+});

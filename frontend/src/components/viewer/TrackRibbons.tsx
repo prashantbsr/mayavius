@@ -58,3 +58,33 @@ function trackColor(scene: Mv4dScene, m: number, out: THREE.Color): THREE.Color 
 }
 
 /** Split every track into contiguous visible runs and build one Line2 per run
+ * (spec/07 §2.2), collected under a group. CPU-dequants track positions to
+ * Float32 (the only CPU dequant). Returns `null` when the scene has no tracks. */
+function buildRibbonGroup(scene: Mv4dScene): THREE.Group | null {
+  const tracks = scene.tracks;
+  if (!tracks) return null;
+
+  const T = scene.frameCount;
+  const M = tracks.count;
+  const q = tracks.positionsQ; // u16, length M*T*3
+  const [minX, minY, minZ] = scene.aabbMin;
+  const [maxX, maxY, maxZ] = scene.aabbMax;
+  const color = new THREE.Color();
+  const group = new THREE.Group();
+
+  for (let m = 0; m < M; m++) {
+    trackColor(scene, m, color);
+    // One material per track (each run of a track shares its color/width).
+    let material: LineMaterial | null = null;
+
+    let t = 0;
+    while (t < T) {
+      if (!tracks.isVisible(m, t)) {
+        t++;
+        continue;
+      }
+      // Extend a maximal contiguous visible run [runStart .. t-1].
+      const runStart = t;
+      while (t < T && tracks.isVisible(m, t)) t++;
+      const runEnd = t - 1; // inclusive
+      const pointCount = runEnd - runStart + 1;

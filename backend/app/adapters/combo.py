@@ -58,3 +58,33 @@ class VggtCoTracker3Adapter(ReconstructionPort):
         """Lazily construct + cache the VGGT half (no torch at construction)."""
         if self._vggt is None:
             from app.adapters.vggt_adapter import VggtAdapter  # lazy
+
+            self._vggt = VggtAdapter(self._settings)
+        return self._vggt
+
+    def _cot_adapter(self):
+        """Lazily construct + cache the CoTracker3 half (no torch at construction)."""
+        if self._cot is None:
+            from app.adapters.cotracker3_adapter import CoTracker3Adapter  # lazy
+
+            self._cot = CoTracker3Adapter(self._settings)
+        return self._cot
+
+    def _motion_thresh(self) -> float:
+        """Static/dynamic split percentile (spec/06 §5 step 5); default 0.95."""
+        if self._settings is not None:
+            mt = getattr(self._settings, "motion_thresh", None)
+            if mt is not None:
+                return float(mt)
+        return 0.95
+
+    # ---------------------------------------------------------------- reconstruct
+    def reconstruct(
+        self, request, progress: ProgressSink | None = None
+    ) -> Scene4D:
+        """Orchestrate VGGT (once) + CoTracker3 + assemble → RAW ``Scene4D`` (spec/06 §4.6).
+
+        Flow (spec/06 §4.6 / §5):
+          1. decode + subsample the clip ONCE → the shared width-518 frame set
+             (grid-consistency: VGGT and CoTracker3 consume the SAME frames,
+             spec/06 §5 step 4);

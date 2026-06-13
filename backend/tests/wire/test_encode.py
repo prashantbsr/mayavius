@@ -418,3 +418,33 @@ def test_t105_track_color_toggle():
         static_colors=np.empty((0, 3), np.uint8),
         static_conf=None,
         dynamic_positions=[],
+        dynamic_colors=[],
+        cameras=None,
+    )
+    pos = rng.random((M, T, 3), dtype=np.float32).astype(np.float32)
+    vis = np.ones((M, T), bool)
+    with_color = Scene4D(tracks=Tracks(pos, vis, rng.integers(0, 256, (M, 3), np.uint8)), **base)
+    without_color = Scene4D(tracks=Tracks(pos, vis, None), **base)
+
+    b_with = encode_reconstruction(with_color)
+    b_without = encode_reconstruction(without_color)
+    assert _parse_header(b_with)["flags"] & _FLAG_HAS_TRACK_COLOR
+    assert not (_parse_header(b_without)["flags"] & _FLAG_HAS_TRACK_COLOR)
+
+    e_with = _parse_directory(b_with, _parse_header(b_with)["section_count"])
+    e_without = _parse_directory(b_without, _parse_header(b_without)["section_count"])
+    tk_with = next(e for e in e_with if e["kind"] == _KIND_TRACKS)
+    tk_without = next(e for e in e_without if e["kind"] == _KIND_TRACKS)
+    assert tk_with["length"] - tk_without["length"] == M * 3  # u8 colors
+
+    assert decode(b_with).tracks.colors is not None
+    assert decode(b_without).tracks.colors is None
+
+
+# --------------------------------------------------------------------------- #
+# T-106 — empty dynamic frame round-trips
+# --------------------------------------------------------------------------- #
+def test_t106_empty_dynamic_frame():
+    T = 3
+    rng = np.random.default_rng(6)
+    counts = [4, 0, 2]  # middle frame empty (pointCount==0)

@@ -88,3 +88,33 @@ def test_result_returns_the_written_bytes(tmp_path):
 
     async def scenario() -> tuple[str, Job]:
         job_id = await queue.submit("/tmp/clip.mp4", _request())
+        job = await _drive_to_terminal(queue, job_id)
+        return job_id, job
+
+    job_id, job = asyncio.new_event_loop().run_until_complete(scenario())
+
+    blob = queue.result(job_id)
+    assert blob[:4] == _MV4D_MAGIC
+    assert blob == (tmp_path / f"{job.id}.mv4d").read_bytes()
+    assert len(blob) == job.bytes_len
+
+
+def test_result_before_done_raises(tmp_path):
+    """result() on a non-DONE job raises (caller maps 409)."""
+    queue = _make_queue(tmp_path)
+    queue._jobs["pending"] = Job(id="pending", status=JobStatus.RUNNING)
+    with pytest.raises(Exception):
+        queue.result("pending")
+
+
+def test_status_unknown_id_raises_keyerror(tmp_path):
+    """status() on an unknown id raises KeyError (caller maps 404)."""
+    queue = _make_queue(tmp_path)
+    with pytest.raises(KeyError):
+        queue.status("nope")
+
+
+def test_events_on_finished_job_yields_terminal_event(tmp_path):
+    """events() on an already-finished job yields a single terminal event and returns."""
+    queue = _make_queue(tmp_path)
+

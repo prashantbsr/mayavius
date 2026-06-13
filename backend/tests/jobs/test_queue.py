@@ -238,3 +238,33 @@ class _BoomAdapter(ReconstructionPort):
         raise ValueError("unwrapped bug")
 
 
+def test_unwrapped_exception_backstop_yields_failed(tmp_path):
+    """ANY other Exception → FAILED with code 'inference_failed' (never hangs RUNNING)."""
+    queue = _make_queue(tmp_path, adapter=_BoomAdapter())
+
+    async def scenario() -> Job:
+        job_id = await queue.submit("/tmp/clip.mp4", _request())
+        return await _drive_to_terminal(queue, job_id)
+
+    job = asyncio.new_event_loop().run_until_complete(scenario())
+
+    assert job.status is JobStatus.FAILED
+    assert job.error["code"] == "inference_failed"
+    assert "unwrapped bug" in job.error["message"]
+
+
+def test_job_to_json_base_keys_always_present(tmp_path):
+    """job_to_json always carries the six snake_case base keys; queued has no result/error."""
+    job = Job(id="abc")
+    payload = job_to_json(job)
+    assert set(payload) == {
+        "id",
+        "status",
+        "progress",
+        "stage",
+        "adapter_id",
+        "weights_license",
+    }
+    assert payload["status"] == "queued"
+    assert payload["progress"] == 0.0
+    assert payload["stage"] == "queued"

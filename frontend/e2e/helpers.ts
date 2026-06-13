@@ -88,3 +88,33 @@ export async function progressSeen(page: Page): Promise<number[]> {
  * Drag a range `<input>` thumb across [0,1] by dispatching the native `input`
  * sequence the React handler listens to. Real pointer drags on a styled range
  * input are flaky across engines; the scrubber's contract (spec/07 §4.2) is "an
+ * `input` event writes `setTime`", so we drive that contract directly with a
+ * sequence of values to emulate a scrub from `from`→`to` (default 0→1).
+ */
+export async function scrubTimeline(
+  page: Page,
+  selector: string,
+  from = 0,
+  to = 1,
+  steps = 8,
+): Promise<void> {
+  await page.$eval(
+    selector,
+    (el, { f, t, n }) => {
+      const input = el as HTMLInputElement;
+      const setVal = (v: number) => {
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set;
+        setter?.call(input, String(v));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      for (let i = 0; i <= n; i++) {
+        setVal(f + ((t - f) * i) / n);
+      }
+    },
+    { f: from, t: to, n: steps },
+  );
+}

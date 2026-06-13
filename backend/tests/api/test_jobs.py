@@ -118,3 +118,33 @@ def test_upload_rejections(client) -> None:
 
     # Non-video content-type -> 415.
     r = client.post("/jobs", files={"clip": ("x.txt", b"not a video", "text/plain")})
+    assert r.status_code == 415
+
+    # Missing clip field -> 422 (FastAPI validation).
+    r = client.post("/jobs", files={})
+    assert r.status_code == 422
+
+
+# --- T-308 ---------------------------------------------------------------------
+def test_sse_progress_stream(client) -> None:
+    import json
+
+    job_id = client.post("/jobs", files=_multipart()).json()["job_id"]
+
+    with client.stream("GET", f"/jobs/{job_id}/stream") as r:
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/event-stream")
+        # NOT gzip (SSE safety, C7 — no GZipMiddleware).
+        assert r.headers.get("content-encoding", "").lower() != "gzip"
+
+        events: list[dict] = []
+        for line in r.iter_lines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[len("data:"):].strip()))
+
+    assert len(events) >= 1
+    progresses = [e["progress"] for e in events]
+    for a, b in zip(progresses, progresses[1:]):
+        assert b >= a, progresses
+    # Last event is terminal done (tolerate a fast job emitting only the terminal).
+    assert events[-1]["status"] == "done"

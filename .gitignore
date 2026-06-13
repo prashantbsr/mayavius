@@ -1,0 +1,42 @@
+# --- Dependencies ---
+node_modules/
+**/node_modules/
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# --- Builds / caches ---
+.next/
+**/.next/
+out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+.pytest_cache/
+**/.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- Env files (keep *.env.example) ---
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# --- Model weights & runtime data (never commit; multi-GB) ---
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+**/.cache/
+backend/models/
+backend/uploads/
+backend/outputs/
+
+# --- OS / editor ---
+.DS_Store
+*.log

@@ -7,7 +7,8 @@
 # Likely baseline (UNPINNED placeholders — do NOT install until verified):
 #   torch            # PyTorch with MPS backend on Apple Silicon; fp32 only (no fp16 autocast on MPS)
 #   torchvision
-#   numpy
+#   (numpy is NOT here — it graduated to the lightweight requirements.txt because the
+#    model-agnostic core depends on it; see spec/08 §3/§4.2)
 #   opencv-python    # video decode / frame extraction
 #   huggingface-hub  # pull model weights (e.g. VGGT-1B-Commercial)
 #   einops

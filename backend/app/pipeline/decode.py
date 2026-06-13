@@ -178,3 +178,33 @@ def _decode_imageio(video_path: str) -> tuple[list[np.ndarray], float]:
 
 
 def decode_and_subsample(request) -> np.ndarray:
+    """Decode ``request.video_path`` → frames ``[S, 3, H, W]`` RGB uint8 (spec/06 §5 step 1).
+
+    Uniformly subsamples to ``request.target_fps`` and caps to
+    ``request.max_frames`` (hard ceiling 64, spec/05 §4); width is rescaled to 518.
+    Tries cv2 first, then imageio. Raises ``UnsupportedMediaError`` if neither
+    backend is installed or the clip yields zero frames.
+
+    Torch-free: returns numpy ``uint8``; the adapter converts to a tensor itself.
+    """
+    video_path = request.video_path
+    target_fps = float(getattr(request, "target_fps", 12.0))
+    max_frames = int(getattr(request, "max_frames", 24))
+
+    frames: list[np.ndarray] = []
+    src_fps = 0.0
+    cv2_err: Exception | None = None
+    try:
+        frames, src_fps = _decode_cv2(video_path)
+    except ImportError as exc:  # cv2 absent — fall through to imageio
+        cv2_err = exc
+    except Exception as exc:  # noqa: BLE001 - cv2 raised on a bad container; try imageio
+        cv2_err = exc
+        logger.warning("cv2 decode failed for %s (%s); trying imageio", video_path, exc)
+
+    if not frames:
+        try:
+            frames, src_fps = _decode_imageio(video_path)
+        except ImportError as exc:
+            if cv2_err is not None:
+                raise UnsupportedMediaError(

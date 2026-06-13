@@ -208,3 +208,33 @@ def test_reconstruction_error_yields_failed_with_code(tmp_path):
     job = asyncio.new_event_loop().run_until_complete(scenario())
 
     assert job.status is JobStatus.FAILED
+    assert job.error is not None
+    assert job.error["code"] == "inference_failed"
+    assert "exploded" in job.error["message"]
+
+    payload = job_to_json(job)
+    assert payload["status"] == "failed"
+    assert payload["error"]["code"] == "inference_failed"
+    assert "result" not in payload
+
+
+class _BoomAdapter(ReconstructionPort):
+    """An adapter raising a NON-ReconstructionError (an unwrapped bug)."""
+
+    name = "boom"
+
+    @property
+    def info(self) -> AdapterInfo:
+        return AdapterInfo(
+            name="boom",
+            produces_tracks=False,
+            dynamic=False,
+            mps_capable=True,
+            weights_license="none",
+            default_weights="(none)",
+        )
+
+    def reconstruct(self, request, progress=None) -> Scene4D:
+        raise ValueError("unwrapped bug")
+
+

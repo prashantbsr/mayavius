@@ -524,3 +524,372 @@ progress (T-303), even though the work is near-instant.
 
 ---
 
+## 5. Reconstruction pipeline (`ReconstructionService` + worker)
+
+`ReconstructionService.run` stays **pure orchestration** (no torch). It validates
+the request against caps, invokes the injected adapter (passing the progress sink),
+then applies **model-agnostic** post-processing on the returned `Scene4D` before
+encoding. Heavy, model-specific steps (decode, inference, lift, split) live in the
+adapter / shared adapter utils — **not** in core.
+
+```
+clip file
+  │  (1) decode + subsample  ──────────── pipeline `decode_and_subsample` (opencv→imageio fallback)
+  ▼
+frames [S,3,H,W] @ width 518, S ≤ max_frames(≤64)
+  │  (2) VGGT forward (fp32, MPS)  ────── per-frame world points(+conf), depth(+conf), camera  → GeometryResult
+  │  (3) CoTracker3 (MPS) → 2D tracks + visibility
+  │  (4) lift 2D→3D with VGGT depth/intrinsics/pose  → TrackResult
+  │  (5) STATIC/DYNAMIC split + assemble → Scene4D  ── pipeline/assemble.py (uses raw per-frame maps; the "wow"; risk #3)
+  ▼  ........... adapter returns an ALREADY-SPLIT Scene4D (static + dense dynamic + tracks + cameras) ...........
+  │  (6) temporal smoothing + confidence culling            ── core ReconstructionService (risk #2)
+  │  (7) enforce MV4D caps (cull/subsample to N_s,N_d,M,T)  ── core (spec/05 §4)
+  ▼
+Scene4D (final) → (8) encode_reconstruction → MV4D v1 bytes → (9) store blob
+```
+
+| Step | Where | Detail / default | Negative-knowledge / risk |
+|------|-------|------------------|---------------------------|
+| 1. Decode + subsample | `pipeline/decode.py` | `opencv-python` (`cv2.VideoCapture`) primary; `imageio[ffmpeg]` fallback for awkward containers (spec/08 §4.2). Uniformly subsample to `target_fps`, cap to `max_frames`; rescale width→518. **Returns a numpy `uint8 [S,3,H,W]` RGB array** (torch-free, per W3.T1 purity); each adapter does `torch.from_numpy(...).to(device).float()/255` itself. | MegaSaM-style per-video optimization is **rejected** (decision-log §D): not feedforward, ~0.7 FPS. |
+| 2. VGGT static | `VggtAdapter` | world points→static; depth+camera kept for lift. fp32, no autocast. | upstream CUDA/CPU-only → community-port pattern (spec/08 §4.3). |
+| 3. CoTracker3 2D | `CoTracker3Adapter` | grid query (≤4096 pts) on frame 0; offline model. | 2D only — must lift. |
+| 4. Lift 2D→3D | `pipeline/lift.py` | per sample `(u_px,v_px)` + VGGT depth `D` + **pixel** intrinsics: `x=(u_px−cx)·D/fx`, `y=(v_px−cy)·D/fy`, `z=D` (OpenCV cam), then axis-flip + cam→world (§4.1a) → world point; carry `pred_visibility`. **Grid consistency (silent-failure guard):** CoTracker3 MUST run on the **exact same** `decode_and_subsample` frames VGGT consumes; use VGGT's own preprocessing (`vggt.utils.load_fn`) for any internal resize/pad to a patch-multiple, and `(u_px,v_px)` + the `(fx,fy,cx,cy)` divisor + CAMERAS normalization all use that **same processed (W,H)** — not the original clip resolution. Confirm the processed grid on-device at W3 (T-510) and log it. | depth holes / occlusion → mark invisible (ribbon gap); grid mismatch = tracks at wrong depths (passes "≥1 track" but ruins DoD §5.2 — hence the contract). |
+| 5. **Static/dynamic split + assemble** (the dense dynamic layer — the "wow") | **`pipeline/assemble.py`** (adapter-side; consumes raw `GeometryResult`) | VGGT gives a **per-frame** world point map `(S,H,W,3)` (in `GeometryResult`, never in `Scene4D`). A frame-`t` point is **dynamic** if it lies within radius `r` (default 2% AABB diag) of any CoTracker3 track sample whose inter-frame displacement exceeds the motion threshold (`MAYAVIUS_MOTION_THRESH`, default 95th-pct of inter-frame track motion, min abs = 1% AABB diag). **Spatial query = numpy brute-force** (chunked `(N,M)` distance; `N_d_t`≤~270k, `M`≤4096 fits — **no scipy dep**). → `dynamic_positions[t]` = the **moving subset of frame `t`'s VGGT points** (dense colored cluster); `static_positions` = the low-motion union across frames **deduped by voxel-grid downsample** (voxel = 0.5% AABB diag, keep highest-conf point + its color per voxel, no averaging); sparse `tracks` drive the ribbons. assemble returns this as the `Scene4D`. | **risk #3 (the wow):** makes the subject animate as a **dense** cluster, not just sparse tracks. Alt = foreground-mask seeding; if speed needs it add `scipy.spatial.cKDTree` (declare in requirements.txt, log it). **Fallback (logged):** if per-frame VGGT points are too noisy, set `dynamic_positions[t]` = lifted moving track points only (sparse) — DoD §5.2 then reads against the sparse form. |
+| 6. Smooth + cull | `ReconstructionService` | temporal smoothing of track positions (centered moving average, window=3 default) to kill jitter; **confidence culling** of static points below `MAYAVIUS_CONF_THRESH` (default keep top by VGGT conf). | **risk #2 (noise).** Too-aggressive cull empties the cloud → `EmptyReconstructionError`. |
+| 7. Enforce caps | `ReconstructionService` | cull static→`≤150k` (**lowest `static_conf` first**); dynamic→`≤20k/frame` by **uniform random subsample, fixed seed** (deterministic, **confidence-free** — dynamic frames carry no per-point conf in `Scene4D`; alt = voxel-grid downsample at the §5-step-5 voxel size, switch if random visibly thins the cluster on C-1 at W4.T3); tracks→`≤4096` (lowest mean-visibility first); frames→`≤64` (uniform temporal subsample); log chosen counts + final payload size. | spec/05 §4; payload target ≤12 MB, hard ceiling 24 MB. |
+| 8. Encode | `wire/encoder.py` | `encode_reconstruction(scene: Scene4D) -> bytes` — MV4D v1. AABB over **all** positions (static∪dynamic∪tracks), computed in **float32**; quantize in **float32** using the f32 header AABB as the divisor ([05 §2](05-data-contract.md)). The encoder assumes an already-capped scene (§5 step 7) and only logs final counts/size. | bytes owned by spec/05 — never redefined here. |
+| 9. Store | worker | write blob to `MAYAVIUS_RESULT_DIR/{job_id}.mv4d`; record size + counts + provenance in job. | immutable → long-cache served (§7). |
+
+```python
+# core/services/reconstruction_service.py (illustrative — replaces the stub)
+class ReconstructionService:
+    def __init__(self, adapter: ReconstructionPort, *,
+                 conf_thresh: float = 0.5, smooth_window: int = 3) -> None:
+        self._adapter = adapter            # tunables are PLAIN FLOATS — core never imports app.config.
+        self._conf_thresh = conf_thresh    # the worker/deps builds the service from Settings (§6/spec/08 §6)
+        self._smooth_window = smooth_window
+    def run(self, request: ReconstructionRequest,
+            progress: ProgressSink | None = None) -> Scene4D:
+        request.validate()                                  # caps (raises ClipTooLong)
+        scene = self._adapter.reconstruct(request, progress)  # ALREADY-split Scene4D (split done in assemble, §4.6)
+        scene = smooth_and_cull(scene, conf_thresh=self._conf_thresh, window=self._smooth_window)  # step 6
+        scene = enforce_caps(scene)                          # step 7 (MV4D caps are constants, spec/05 §4)
+        if scene.static_positions.size == 0 and not scene.tracks:
+            raise EmptyReconstructionError("no usable points after culling")
+        scene.adapter_id = self._adapter.info.name
+        scene.weights_license = self._adapter.info.weights_license
+        return scene
+```
+
+`smooth_and_cull(scene, *, conf_thresh, window=3)` and `enforce_caps(scene)` are
+**pure numpy** helpers in `core/services/` (no torch) operating on the canonical
+`Scene4D` fields — testable on CI without ML deps (spec/10). **Threshold plumbing
+(config-free core):** the tunables are **plain float/int args**, not a `Settings`
+object — `conf_thresh`/`smooth_window` are injected into `ReconstructionService`'s
+constructor by the worker/deps (which reads `settings.conf_thresh`), and
+`motion_thresh` is used by the **adapter** (the combo receives `settings` via the
+registry factory, §4.6). So the core never imports `app.config`. `ReconstructionRequest`
+stays device/clip-only (§3); thresholds do not travel on it. The **static/dynamic split** is **not** in core: it lives in
+`pipeline/assemble.py` (adapter-side) because it needs `GeometryResult`'s raw
+per-frame VGGT maps, which never enter `Scene4D`. So the adapter returns an
+already-split scene and the core only smooths/culls/caps it. (`smooth_and_cull`:
+centered moving-average window=3 on track positions — shrink-window at the t=0/T-1
+edges, skip invisible samples; confidence-cull static points with `static_conf/255 <
+conf_thresh`, skipped when `static_conf is None`. If **no visible sample** falls within
+the shrunk window for a given `(m,t)`, keep that sample's own position unchanged — no
+smoothing — and leave its visibility bit untouched.) **`static_conf` mapping:** `assemble`
+builds it from VGGT's `world_points_conf` as `clip(round(per-scene min-max-normalized
+conf · 255), 0, 255)` (u8) — VGGT confidence is **not** guaranteed `[0,1]`, so normalize
+per-scene; confirm the conf range on-device at W3 (T-510) and log it.
+
+---
+
+## 6. Async job model (`jobs/queue.py`)
+
+MVP: an **in-process** `JobQueue` with an `asyncio`-driven background worker is
+sufficient for local single-user dev (handover §4.4). A durable/distributed queue
+(Redis/RQ) is an optional deploy concern (spec/11) — the port boundary makes that
+swap non-architectural.
+
+```python
+# jobs/queue.py (illustrative)
+from dataclasses import dataclass, field
+from enum import Enum
+import asyncio, uuid
+
+class JobStatus(str, Enum):
+    QUEUED="queued"; RUNNING="running"; DONE="done"; FAILED="failed"
+
+@dataclass
+class Job:
+    id: str
+    status: JobStatus = JobStatus.QUEUED
+    progress: float = 0.0                 # 0..1
+    stage: str = "queued"
+    result_path: str | None = None        # set when DONE
+    bytes_len: int | None = None
+    adapter_id: str = ""
+    weights_license: str = ""
+    error: dict | None = None             # {code, message} when FAILED
+    _events: asyncio.Queue = field(default_factory=asyncio.Queue)  # for SSE
+
+class JobQueue:
+    def __init__(self, service: ReconstructionService, result_dir: str): ...
+    async def submit(self, video_path: str, request: ReconstructionRequest) -> str:
+        """Create job, schedule worker via asyncio.create_task / run_in_executor.
+        Inference is CPU/GPU-bound and BLOCKING → run in a thread pool executor
+        (run_in_executor) so the event loop (and SSE) stays responsive."""
+    def status(self, job_id: str) -> Job: ...        # raises KeyError -> 404
+    def result(self, job_id: str) -> bytes: ...       # raises if not DONE -> 409
+    async def events(self, job_id: str): ...          # async-gen for SSE; already-terminal → emit once + return (see below)
+```
+
+**Worker flow:** `submit` writes the upload to a temp path, creates a `Job`, and
+schedules `_run(job)` which (a) builds a `progress` closure that updates
+`job.progress/stage` and pushes a `ServerSentEvent` onto `job._events`, (b) calls
+`service.run(request, progress)` **inside `loop.run_in_executor`** (the heavy work
+is synchronous/torch — must not block the loop), (c) on success encodes + writes the
+blob, sets `DONE` + `result_path`/`bytes_len`/provenance, (d) on
+`ReconstructionError` sets `FAILED` + `error={code,message}`; **on any other
+`Exception`** (an unwrapped bug / torch / MPS fault) sets `FAILED` +
+`error={code:"inference_failed", message:str(exc)}` — the broad catch is the backstop
+that guarantees a real-adapter fault never leaves the job hanging in `RUNNING` (which
+would also hang an awaiting SSE client). (e) pushes a terminal event so SSE clients
+close. (Adapters SHOULD raise `InferenceError` for runtime faults; the worker's broad
+catch is the guarantee.)
+
+Progress streaming uses **FastAPI's built-in SSE** (C7, spec/08 §3):
+`from fastapi.sse import EventSourceResponse, ServerSentEvent` — **NOT**
+`sse-starlette`. SSE is incompatible with `GZipMiddleware`, so the app deliberately
+adds **no `GZipMiddleware`**. The **result blob** ships uncompressed from the app
+(it is already compact binary, ≤12 MB target); any compression is the serving
+layer's concern (reverse proxy / CDN / HF Space), never middleware (§7).
+
+**Example pre-seeding (deterministic; survives restart).** The in-process queue is
+volatile, so example results are **seeded at startup**, never reconstructed at view
+time. `JobQueue` exposes:
+```python
+def seed_example(self, slug: str, mv4d_path: str) -> None:
+    """Register a pre-baked MV4D blob as a terminal DONE job under id == slug."""
+    self._jobs[slug] = Job(id=slug, status=JobStatus.DONE, progress=1.0, stage="done",
+                           result_path=mv4d_path, adapter_id="fixture", weights_license="none")
+```
+The FastAPI lifespan seeds examples from the **repo-root** corpus dir, resolved
+absolutely (the corpus lives at repo-root `assets/samples/`, but the process runs from
+`backend/` — so anchor it like `result_dir`, but to the **repo root**, not `backend/`):
+`SAMPLES_DIR = Path(__file__).resolve().parents[2] / "assets" / "samples"`
+(`parents[2]` from `app/config.py` = repo root). The lifespan globs
+`SAMPLES_DIR / "*.mv4d"` and calls `seed_example(stem, str(path))` for **each file
+that exists** (slug = filename stem) — so W1 (no committed `.mv4d` yet) seeds nothing
+without error, and W2+ seed `example` (then C-1..C-4 in W4). A bare relative
+`"assets/samples/<slug>.mv4d"` would resolve to `backend/assets/samples/` under `cd
+backend` and silently seed nothing — do not use it. **Pinned slugs (frontend and backend MUST use these literals):**
+in **W2 fixture mode**, exactly one — slug **`example`** (`assets/samples/example.mv4d`,
+a small committed MV4D — a copy/re-encode of the golden scene); the **W4** corpus adds
+**`walking-person`**, **`street-vehicle`**, **`pet-motion`**, **`static-scene`** (C-1..C-4,
+[10 §6](10-testing-strategy.md)). The example **`slug` is the same id space as a job
+id**, so `GET /jobs/<slug>` and `GET /jobs/<slug>/result` resolve identically after
+every boot and the frontend `/view/<slug>` uses the *exact same* fetch+decode path as
+a real result (spec/07 §6). No reconstruction runs for examples.
+
+**`job_to_json` (the wire JSON the frontend parses — from both poll and SSE `data`):**
+```python
+def job_to_json(job: Job) -> dict:
+    d = {"id": job.id, "status": job.status.value, "progress": job.progress,
+         "stage": job.stage, "adapter_id": job.adapter_id,
+         "weights_license": job.weights_license}
+    if job.status is JobStatus.DONE:   d["result"] = f"/jobs/{job.id}/result"  # only when done
+    if job.status is JobStatus.FAILED: d["error"]  = job.error                  # {code, message}, only when failed
+    return d
+```
+The six base keys are **always present** (on `queued`: `progress=0.0`, `stage="queued"`);
+`result` (a relative URL string) appears iff `done`; `error` (`{code,message}`) iff
+`failed`. This is exactly what spec/07 §6 step 2's deserializer handles. (snake_case.)
+
+**`events(job_id)` late-subscriber / already-terminal contract:** `events` first emits
+the **current** job state; if the job is **already terminal** (`done`/`failed` — e.g.
+a seeded example, or a job that finished before the client connected) it yields that
+single terminal event and **returns immediately** (no `asyncio.Queue` wait, so a late
+or pre-seeded subscriber never blocks/hangs the keepalive). Otherwise it awaits
+`job._events` until a terminal event arrives, then returns.
+
+---
+
+## 7. FastAPI endpoints (`api/routes/jobs.py` + `main.py`)
+
+Fills in the four 501 stubs. All under router prefix `/jobs` except `/health`
+(on `app`). `params` are path params (sync here — Next 16 async-params note is a
+frontend concern). The `JobQueue` is injected via a FastAPI dependency built in the
+lifespan; adapter is resolved once at startup (§4.6).
+
+### POST `/jobs` — submit a clip
+
+| | |
+|---|---|
+| Request | `multipart/form-data`, field **`clip`** = `UploadFile` (the video) |
+| Success | **202 Accepted** |
+| Body | `{ "job_id": str, "status": "queued", "poll": "/jobs/{id}", "stream": "/jobs/{id}/stream", "result": "/jobs/{id}/result" }` |
+| Validation (sync, pre-enqueue) | content-type must be `video/*` else **415**; bytes ≤ `MAX_UPLOAD_MB` else **413** (§8); decode probe may raise `UnsupportedMediaError`→415 |
+
+```python
+@router.post("", status_code=status.HTTP_202_ACCEPTED)
+async def submit_job(clip: UploadFile, queue: JobQueue = Depends(get_queue)) -> dict:
+    if not (clip.content_type or "").startswith("video/"):
+        raise HTTPException(415, "expected a video/* upload")
+    path = await save_capped_upload(clip, settings.max_upload_mb)  # streams; 413 if over (§8)
+    req = ReconstructionRequest(video_path=path,
+                                max_frames=min(settings.max_clip_frames, 64),  # clamp at construction (§3)
+                                target_fps=settings.target_fps,
+                                device=settings.device)
+    job_id = await queue.submit(path, req)
+    return {"job_id": job_id, "status": "queued",
+            "poll": f"/jobs/{job_id}", "stream": f"/jobs/{job_id}/stream",
+            "result": f"/jobs/{job_id}/result"}
+```
+
+### GET `/jobs/{id}` — status (poll, JSON)
+
+| | |
+|---|---|
+| Response | **200** `application/json` |
+| Body | `{ id, status, progress (0..1), stage, adapter_id, weights_license, error?, result? }` (`result` URL present iff status==`done`) |
+| Not found | **404** (unknown `id`) |
+
+```python
+@router.get("/{job_id}")
+async def get_job(job_id: str, queue: JobQueue = Depends(get_queue)) -> dict:
+    try: return job_to_json(queue.status(job_id))
+    except KeyError: raise HTTPException(404, "unknown job id")
+```
+
+### GET `/jobs/{id}/stream` — progress stream (SSE)
+
+**Why a separate route (not `?stream=1` on the poll handler):** FastAPI 0.136's
+`fastapi.sse.EventSourceResponse` is a **marker class** — SSE encoding is enabled by
+declaring `response_class=EventSourceResponse` on a **generator** path operation that
+`yield`s `ServerSentEvent`s; you cannot `return EventSourceResponse(gen)` from a
+normal handler, and a single path operation cannot serve **both** JSON and SSE
+because `response_class` is fixed per operation. So SSE is its own route. (`fastapi.sse`,
+**not** `sse-starlette` — C7. Not behind `GZipMiddleware`.)
+
+| | |
+|---|---|
+| Response | **200** `text/event-stream` (SSE) |
+| Events | one `ServerSentEvent(data=<the poll JSON>, event=<status>)` per progress update; the **terminal** event has `status` ∈ {`done`,`failed`}; the generator then returns and the client closes. The `event=<status>` is a **named** SSE event by design — the browser dispatches it to `addEventListener(<status>, …)`, **not** `onmessage`; the client consumes it accordingly (spec/07 §6 step 2). `data` is the dict (fastapi.sse JSON-encodes it once — do not pre-`json.dumps`). |
+| Not found | **404** (unknown `id`) |
+
+```python
+from fastapi.sse import EventSourceResponse, ServerSentEvent   # fastapi.sse (C7), NOT sse-starlette
+
+@router.get("/{job_id}/stream", response_class=EventSourceResponse)
+async def stream_job(job_id: str, queue: JobQueue = Depends(get_queue)):
+    try: queue.status(job_id)                          # 404 before the stream starts
+    except KeyError: raise HTTPException(404, "unknown job id")
+    async for event in queue.events(job_id):           # yields ServerSentEvent(data=job JSON, event=status)
+        yield event                                     # FastAPI encodes via response_class
+```
+
+### GET `/jobs/{id}/result` — the MV4D blob
+
+| | |
+|---|---|
+| Success | **200** `Content-Type: application/octet-stream`, body = MV4D v1 bytes (spec/05) |
+| Headers | `Cache-Control: public, max-age=31536000, immutable` (result is immutable → shareable links, spec/05 §4); `ETag: "{job_id}"`; `Content-Disposition: inline; filename="{job_id}.mv4d"`. **No route-level `Content-Encoding`** — the blob is already compact binary; compression (if any) is left to the serving layer (reverse proxy / CDN / HF Space), and the app deliberately adds **no `GZipMiddleware`** (SSE safety, C7). |
+| Not found | **404** unknown id |
+| Not ready | **409 Conflict** for any non-`done` status: if status ∈ {queued,running} → body `{code:"not_ready", status}`; if status == `failed` → **409** with body `{code:<job.error.code>, error:{code,message}}`. (No 5xx here — a failed *job* is a client-visible 409, not a server fault.) |
+
+```python
+@router.get("/{job_id}/result")
+async def get_result(job_id: str, queue: JobQueue = Depends(get_queue)) -> Response:
+    try: job = queue.status(job_id)
+    except KeyError: raise HTTPException(404, "unknown job id")
+    if job.status is not JobStatus.DONE:
+        raise HTTPException(409, {"code": "not_ready", "status": job.status})
+    return Response(content=queue.result(job_id),
+                    media_type="application/octet-stream",
+                    headers={"Cache-Control": "public, max-age=31536000, immutable",
+                             "ETag": f'"{job_id}"'})
+```
+
+### GET `/health` — liveness
+
+**200** `{"status":"ok", "adapter":..., "device":..., "weights_license":...}` — the
+build adds `adapter`/`device`/`weights_license` from the resolved adapter's `info`
+(D2 license surface). The scaffold `tests/test_health.py` currently asserts
+**exact-dict equality** `== {"status":"ok"}`, which adding fields breaks — so
+**W1.T3 owns rewriting that test** to a membership/superset check (an owned, logged
+edit, not a forbidden weakening), e.g.:
+```python
+def test_health():
+    r = client.get("/health"); assert r.status_code == 200
+    body = r.json(); assert body["status"] == "ok"
+    assert {"adapter", "device", "weights_license"} <= body.keys()
+```
+`tests/test_health.py` is in W1.T3's file list (spec/09); T-300 (spec/10) defines
+"extends" as this equality→membership rewrite.
+
+### Endpoint summary
+
+| Method | Path | Success | Errors |
+|--------|------|---------|--------|
+| POST | `/jobs` (multipart `clip`) | 202 + `{job_id,...}` | 415, 413 |
+| GET | `/jobs/{id}` (poll) | 200 JSON status | 404 |
+| GET | `/jobs/{id}/stream` | 200 `text/event-stream` (SSE) | 404 |
+| GET | `/jobs/{id}/result` | 200 octet-stream MV4D | 404, 409 |
+| GET | `/health` | 200 `{status,adapter,...}` | — |
+
+---
+
+## 8. Clip-cap + upload-size enforcement (`config.py`)
+
+Two guards, two configs. `Settings` (env `MAYAVIUS_`-prefixed, spec/08 §6) gains
+`adapter`, `device`, and `result_dir`; the existing `max_clip_frames` /
+`max_upload_mb` stay:
+
+| Setting | Env | Default | Enforced where |
+|---------|-----|---------|----------------|
+| `cors_origins` | `MAYAVIUS_CORS_ORIGINS` | `["http://localhost:3000"]` | `main.py` CORS |
+| `max_clip_frames` | `MAYAVIUS_MAX_CLIP_FRAMES` | `24` (≤64 hard) | `ReconstructionRequest` / pipeline step 1 (subsample); clamped `min(.,64)` |
+| `max_upload_mb` | `MAYAVIUS_MAX_UPLOAD_MB` | `64` | `save_capped_upload` (streamed; abort+413 once exceeded) |
+| `adapter` | `MAYAVIUS_ADAPTER` | `vggt+cotracker3` | `build_adapter` at startup (§4.6); `fake` for fixture mode |
+| `device` | `MAYAVIUS_DEVICE` | `mps` | passed into `ReconstructionRequest.device` |
+| `target_fps` | `MAYAVIUS_TARGET_FPS` | `12.0` | subsample target + MV4D playback fps; passed into `ReconstructionRequest.target_fps` |
+| `motion_thresh` | `MAYAVIUS_MOTION_THRESH` | `0.95` | static/dynamic split percentile (§5 step 5) |
+| `conf_thresh` | `MAYAVIUS_CONF_THRESH` | `0.5` | confidence cull floor for static points (§5 step 6) |
+| `vggt_weights` | `MAYAVIUS_VGGT_WEIGHTS` | `facebook/VGGT-1B` | VGGT checkpoint id (commercial swap = `facebook/VGGT-1B-Commercial`, §4.1) |
+| `result_dir` | `MAYAVIUS_RESULT_DIR` | `outputs` (resolved absolute to `backend/outputs`) | worker blob store; served by `/result` |
+
+> These six are **new** `Settings` fields to add to `app/config.py` (the scaffold
+> has only `cors_origins`/`max_clip_frames`/`max_upload_mb`); mirrored in
+> [08-dependencies-and-env.md](08-dependencies-and-env.md) §6. **`result_dir`
+> anchoring (do not use a bare cwd-relative path):** the run/test commands `cd
+> backend` first, so a literal `./backend/outputs` would resolve to
+> `backend/backend/outputs` (un-ignored → blobs become committable). Instead the
+> worker resolves it absolutely against the backend package root and creates it at
+> startup: `RESULT_DIR = (Path(__file__).resolve().parents[1] / settings.result_dir);
+> RESULT_DIR.mkdir(parents=True, exist_ok=True)` (from `app/config.py`,
+> `parents[1]` = `backend/`). With the default `outputs` this is always
+> `backend/outputs/`, which the on-disk `.gitignore` (`backend/outputs/`) ignores —
+> so result blobs are never committable regardless of cwd.
+
+**Upload-size guard + where it lives:** `save_capped_upload` is an async helper in
+`api/routes/jobs.py`, signature `async def save_capped_upload(clip: UploadFile,
+max_upload_mb: int) -> str` (returns the absolute saved path). It reads the
+`UploadFile` stream in chunks, summing bytes; aborts with **413** the moment the
+running total exceeds `max_upload_mb` (do **not** trust `Content-Length`). It writes
+into **`UPLOAD_DIR`**, resolved absolutely against the backend package root exactly
+like `result_dir` (so `cd backend` cannot misplace it): `UPLOAD_DIR =
+(Path(__file__).resolve().parents[1] / "uploads")` → `backend/uploads/` (already
+gitignored, `.gitignore` `backend/uploads/`), `mkdir(parents=True, exist_ok=True)` at
+startup. MVP does not clean up the temp clip after the job (acceptable; a post-job
+`unlink` is an optional improvement). This bounds disk + the decode step before any
+inference.
+
+**Frame-cap guard:** even if a (small-byte) clip has thousands of frames, step 1
+subsamples to `target_fps` and truncates to `max_frames ≤ 64`, so `T ≤ 64` is
+guaranteed before encode (MV4D contract, spec/05 §4). A clip whose post-subsample
+length still can't be reduced under cap (degenerate) raises `ClipTooLongError`→413.
+
+These two caps + the §5 step-7 point caps together keep the MV4D payload under the
+12 MB target / 24 MB ceiling (spec/05 §4) so shareable links stay fast — the whole
+reason JSON is forbidden (handover §4.5).

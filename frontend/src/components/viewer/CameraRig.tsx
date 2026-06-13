@@ -118,3 +118,18 @@ export function CameraRig({
       p[base + 3],
     );
     camera.position.set(p[base + 4], p[base + 5], p[base + 6]);
+    camera.quaternion.copy(q);
+
+    const fy = cameras.intrinsics[t * 4 + 1];
+    if (camera instanceof THREE.PerspectiveCamera && fy > 0) {
+      // Vertical FOV from fy (image-height units): fovY = 2·atan(0.5/fy).
+      const fovYDeg = THREE.MathUtils.radToDeg(2 * Math.atan(0.5 / fy));
+      if (Math.abs(camera.fov - fovYDeg) > 1e-3) {
+        camera.fov = fovYDeg;
+        camera.updateProjectionMatrix();
+      }
+    }
+  });
+
+  return null;
+}

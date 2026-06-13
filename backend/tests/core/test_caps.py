@@ -28,3 +28,33 @@ import numpy as np
 
 import app.core.services.reconstruction_service as svc_mod
 from app.core.domain.errors import EmptyReconstructionError
+from app.core.domain.models import (
+    CameraTrack,
+    ReconstructionRequest,
+    Scene4D,
+    Tracks,
+)
+from app.core.ports.reconstruction_port import (
+    AdapterInfo,
+    ProgressSink,
+    ReconstructionPort,
+)
+from app.core.services.reconstruction_service import (
+    ReconstructionService,
+    enforce_caps,
+)
+
+# MV4D caps (spec/05 §4) — the contract constants. Asserted, not imported-as-truth,
+# so a silent loosening of the module constants would still fail this test.
+MAX_STATIC = 150_000
+MAX_DYNAMIC_PER_FRAME = 20_000
+MAX_TRACKS = 4_096
+MAX_FRAMES = 64
+
+# Over-cap dimensions for the canonical T-104 scene.
+T_OVER = 80          # > 64 frames
+N_STATIC_OVER = 200_000  # > 150k static points
+N_DYN_OVER = 25_000  # one frame with > 20k dynamic points
+M_OVER = 5_000       # > 4096 tracks
+
+

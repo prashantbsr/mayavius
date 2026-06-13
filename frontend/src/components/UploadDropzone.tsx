@@ -28,3 +28,33 @@ function validateClip(file: File): string | null {
   }
   if (file.size > MAX_UPLOAD_BYTES) {
     const mb = (file.size / (1024 * 1024)).toFixed(1);
+    return `Clip is ${mb} MB — the limit is ${MAX_UPLOAD_MB} MB.`;
+  }
+  return null;
+}
+
+export function UploadDropzone() {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // loadState lives in the store so the (future) ProgressOverlay and any other
+  // surface observe the same upload lifecycle (spec/07 §4.1). We flip it to
+  // 'submitting' for the POST, and to 'error' on failure.
+  const loadState = useViewerStore((s) => s.loadState);
+  const setLoadState = useViewerStore((s) => s.setLoadState);
+  const setError = useViewerStore((s) => s.setError);
+  const submitting = loadState === "submitting";
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      if (submitting) return;
+      const validationError = validateClip(file);
+      if (validationError) {
+        setLocalError(validationError);
+        setError(validationError);
+        setLoadState("error");
+        return;
+      }
+      setLocalError(null);

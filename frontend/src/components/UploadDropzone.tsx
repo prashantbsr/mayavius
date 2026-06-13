@@ -118,3 +118,33 @@ export function UploadDropzone() {
         onClick={openPicker}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openPicker();
+          }
+        }}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        data-testid="upload-dropzone"
+        className={[
+          "flex w-full cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed px-8 py-12 text-center transition-colors",
+          dragActive
+            ? "border-foreground bg-foreground/5"
+            : "border-foreground/30 hover:border-foreground/60",
+          submitting ? "pointer-events-none opacity-60" : "",
+        ].join(" ")}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="video/*"
+          className="hidden"
+          onChange={onInputChange}
+          data-testid="upload-input"
+        />
+        <span className="text-base font-medium">
+          {submitting ? "Uploading…" : "Drop a video clip here"}
+        </span>
+        <span className="text-sm opacity-60">
+          or click to choose a file · video/* · up to {MAX_UPLOAD_MB} MB
+        </span>

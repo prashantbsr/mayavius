@@ -58,3 +58,33 @@ N_DYN_OVER = 25_000  # one frame with > 20k dynamic points
 M_OVER = 5_000       # > 4096 tracks
 
 
+def _over_cap_scene(*, seed: int = 1234, with_cameras: bool = True) -> Scene4D:
+    """Build a deterministic OVER-CAP ``Scene4D`` (every cap exceeded).
+
+    Design choices that make the cull-order assertions rigorous:
+      - the over-cap dynamic frame (25 000 points) sits at frame index 0, which the
+        uniform temporal subsample ALWAYS keeps (``linspace`` includes the endpoints)
+        — so the per-frame dynamic cap is genuinely exercised after the frame cull;
+      - ``static_conf`` is a known array so we can assert "every dropped conf <= every
+        kept conf" by multiset against the top-N of the sorted full conf;
+      - track visibility has a known mean per track so the mean-visibility cull order
+        is checkable the same way.
+    """
+    rng = np.random.default_rng(seed)
+
+    # --- static: 200k points, each with a confidence we can audit ---
+    static_positions = rng.random((N_STATIC_OVER, 3)).astype(np.float32)
+    static_colors = (rng.random((N_STATIC_OVER, 3)) * 255).astype(np.uint8)
+    static_conf = rng.integers(0, 256, size=N_STATIC_OVER).astype(np.uint8)
+
+    # --- dynamic: frame 0 is over-cap (25k), the rest are tiny (incl. an empty one) ---
+    dynamic_positions: list[np.ndarray] = []
+    dynamic_colors: list[np.ndarray] = []
+    for t in range(T_OVER):
+        if t == 0:
+            n = N_DYN_OVER
+        elif t == 1:
+            n = 0  # a valid empty frame (spec/05 §3.5)
+        else:
+            n = 50
+        dynamic_positions.append(rng.random((n, 3)).astype(np.float32))

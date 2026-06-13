@@ -28,3 +28,33 @@ export function ProgressOverlay() {
   const progress = useViewerStore((s) => s.progress);
   const error = useViewerStore((s) => s.error);
   const weightsLicense = useViewerStore((s) => s.weightsLicense);
+
+  // Once the scene is ready, get out of the way — the point cloud is the reveal.
+  if (loadState === "ready") return null;
+
+  const isError = loadState === "error";
+  // Clamp the bar to [0,1] defensively (the store value comes from the backend).
+  const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
+
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div className="pointer-events-auto w-72 rounded-lg bg-black/70 p-5 text-white backdrop-blur">
+        <div className="mb-2 text-sm font-medium">{STATE_LABEL[loadState]}</div>
+
+        {isError ? (
+          <p className="text-xs text-red-300">
+            {error ?? "Something went wrong."}
+          </p>
+        ) : (
+          <>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/15">
+              <div
+                className="h-full rounded-full bg-white transition-[width] duration-200"
+                style={{ width: `${pct}%` }}
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={pct}
+              />
+            </div>
+            <div className="mt-1 text-right text-[10px] tabular-nums text-white/60">

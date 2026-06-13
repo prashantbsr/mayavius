@@ -118,3 +118,22 @@ class VggtCoTracker3Adapter(ReconstructionPort):
             progress(0.55, "vggt")
 
         # Feed VGGT's depth/camera/pixel-intrinsics to the CoTracker3 lift (grid
+        # consistency — the SAME width-518 frames + the SAME processed (W,H) divisor,
+        # spec/06 §5 step 4). ``intrinsics_px`` is attached to ``geo`` by run_geometry.
+        intrinsics_px = getattr(geo, "intrinsics_px", None)
+        tr = cot.run_tracks(
+            frames,
+            depth=geo.depth,
+            camera=geo.camera,
+            intrinsics_px=intrinsics_px,
+        )
+        if progress is not None:
+            progress(0.80, "tracking")
+
+        scene = assemble_scene4d(
+            geo, tr, request, motion_thresh=self._motion_thresh()
+        )  # RAW Scene4D (split done here; smooth/cull/caps stay in the SERVICE)
+        if progress is not None:
+            progress(0.95, "assembled")
+
+        return scene

@@ -28,3 +28,33 @@ const EXPECTED_PATH = resolve(
 );
 
 /** Read a file as a standalone `ArrayBuffer` (a fresh copy, so `.buffer`
+ * identity checks for zero-copy views are meaningful — the views must point at
+ * THIS buffer). */
+function readArrayBuffer(path: string): ArrayBuffer {
+  const buf = readFileSync(path);
+  const ab = new ArrayBuffer(buf.byteLength);
+  new Uint8Array(ab).set(buf);
+  return ab;
+}
+
+interface GoldenExpected {
+  version: number;
+  frameCount: number;
+  fps: number;
+  aabbMin: [number, number, number];
+  aabbMax: [number, number, number];
+  posTolerance: [number, number, number];
+  static: {
+    count: number;
+    positions: number[][];
+    colors: number[][];
+    conf: number[];
+  };
+  dynamic: { frames: { count: number; positions: number[][]; colors: number[][] }[] };
+  tracks: {
+    count: number;
+    positions: number[][][];
+    visibility: boolean[][];
+    colors: number[][];
+  };
+  cameras: { poses: number[][]; intrinsics: number[][] };

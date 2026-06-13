@@ -88,3 +88,33 @@ function buildPoints(
 }
 
 export function PointCloud({
+  layer,
+  scene,
+}: {
+  layer: "static" | "dynamic";
+  scene: Mv4dScene;
+}) {
+  // Construct once per (layer, scene) — a pure derivation, no mutation here.
+  const points = useMemo(() => buildPoints(layer, scene), [layer, scene]);
+  // The mounted THREE.Points, captured outside render; ALL mutation goes here.
+  const pointsRef = useRef<THREE.Points | null>(null);
+
+  // Dispose GPU resources when (layer, scene) changes or on unmount.
+  useEffect(
+    () => () => {
+      if (!points) return;
+      points.geometry.dispose();
+      (points.material as THREE.Material).dispose();
+    },
+    [points],
+  );
+
+  // Track the last applied frame so we only re-copy the dynamic buffers when t
+  // actually changes (the loop runs every frame; the active frame does not).
+  const lastFrame = useRef<number>(-1);
+
+  useFrame((state) => {
+    const obj = pointsRef.current;
+    if (!obj) return;
+    const material = obj.material as THREE.ShaderMaterial;
+    // Keep perspective sizing in sync with the live canvas height (cheap write).

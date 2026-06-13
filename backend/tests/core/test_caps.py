@@ -358,3 +358,4 @@ def test_empty_reconstruction_is_the_only_encode_path_raise() -> None:
     except EmptyReconstructionError as exc:
         assert exc.code == "empty_reconstruction"
     else:  # pragma: no cover - the guard must fire
+        raise AssertionError("expected EmptyReconstructionError from the service emptiness guard")

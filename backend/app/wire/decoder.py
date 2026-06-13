@@ -178,3 +178,17 @@ def decode(buffer: bytes) -> Scene4D:
         else:
             # Unknown kind — skip (forward compatibility, spec/05 §1).
             continue
+
+    return Scene4D(
+        frame_count=frame_count,
+        fps=float(fps),
+        aabb_min=aabb_min,
+        aabb_max=aabb_max,
+        static_positions=static_positions,
+        static_colors=static_colors,
+        static_conf=static_conf,
+        dynamic_positions=dynamic_positions,
+        dynamic_colors=dynamic_colors,
+        tracks=tracks,
+        cameras=cameras,
+    )

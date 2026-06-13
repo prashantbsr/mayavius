@@ -1,0 +1,8 @@
+{
+  "name": "static-scene",
+  "source_url": "https://commons.wikimedia.org/wiki/File:Natural_landscape_(Himachal_Pradesh).webm",
+  "license": "CC-BY-SA-4.0",
+  "attribution": "Rajani Gairshail — Wikimedia Commons, https://commons.wikimedia.org/wiki/File:Natural_landscape_(Himachal_Pradesh).webm , CC BY-SA 4.0.",
+  "duration_s": 2.47,
+  "expected": "Almost everything lands in the static cloud; few/no dynamic points or ribbons. The negative control — proves the static/dynamic split does not hallucinate motion (a near-static mountain-valley scene with only minor camera motion)."
+}

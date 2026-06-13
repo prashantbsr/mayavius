@@ -328,3 +328,7 @@ def test_progress_closure_pushes_running_events(tmp_path):
 
     events = asyncio.new_event_loop().run_until_complete(scenario())
 
+    stages = [e.data["stage"] for e in events]
+    assert "alpha" in stages
+    assert "beta" in stages
+    assert events[-1].event == JobStatus.DONE.value

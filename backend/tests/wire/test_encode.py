@@ -178,3 +178,33 @@ def test_t100_roundtrip_all_sections():
 # T-101 — quantization tolerance + degenerate axis
 # --------------------------------------------------------------------------- #
 def test_t101_quantization_tolerance():
+    rng = np.random.default_rng(101)
+    aabb_min = np.array([-5.0, 10.0, 0.0], dtype=np.float32)
+    aabb_max = np.array([5.0, 20.0, 100.0], dtype=np.float32)
+    N = 5000
+    pts = (rng.random((N, 3), dtype=np.float32) * (aabb_max - aabb_min) + aabb_min).astype(
+        np.float32
+    )
+
+    scene = Scene4D(
+        frame_count=1,
+        fps=12.0,
+        aabb_min=aabb_min,
+        aabb_max=aabb_max,
+        static_positions=pts,
+        static_colors=np.zeros((N, 3), np.uint8),
+        static_conf=None,
+        dynamic_positions=[np.empty((0, 3), np.float32)],
+        dynamic_colors=[np.empty((0, 3), np.uint8)],
+        tracks=None,
+        cameras=None,
+    )
+    out = decode(encode_reconstruction(scene))
+
+    span = (out.aabb_max - out.aabb_min).astype(np.float64)
+    tol = span / 65535.0
+    err = np.abs(out.static_positions.astype(np.float64) - pts.astype(np.float64)).max(axis=0)
+    assert np.all(err <= tol + 1e-6), f"err {err} > tol {tol}"
+
+
+def test_t101_degenerate_axis():

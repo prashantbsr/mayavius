@@ -58,3 +58,33 @@ def _make_queue(tmp_path, adapter: ReconstructionPort | None = None) -> JobQueue
     return JobQueue(service, str(tmp_path))
 
 
+def test_submit_runs_to_done_and_writes_mv4d_blob(tmp_path):
+    """submit → status reaches DONE with progress 1.0 and a written .mv4d (MV4D magic)."""
+    queue = _make_queue(tmp_path)
+
+    async def scenario() -> Job:
+        job_id = await queue.submit("/tmp/clip.mp4", _request())
+        assert isinstance(job_id, str) and job_id
+        return await _drive_to_terminal(queue, job_id)
+
+    job = asyncio.new_event_loop().run_until_complete(scenario())
+
+    assert job.status is JobStatus.DONE
+    assert job.progress == 1.0
+    assert job.stage == "done"
+    assert job.adapter_id == "fake"
+    assert job.weights_license == "cc-by-nc-4.0"
+
+    # The blob was written to result_dir/<id>.mv4d and starts with the MV4D magic.
+    assert job.result_path is not None
+    blob = (tmp_path / f"{job.id}.mv4d").read_bytes()
+    assert blob[:4] == _MV4D_MAGIC
+    assert job.bytes_len == len(blob)
+
+
+def test_result_returns_the_written_bytes(tmp_path):
+    """result() returns exactly the bytes written, whose first 4 bytes are MV4D."""
+    queue = _make_queue(tmp_path)
+
+    async def scenario() -> tuple[str, Job]:
+        job_id = await queue.submit("/tmp/clip.mp4", _request())

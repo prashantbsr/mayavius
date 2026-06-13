@@ -118,3 +118,10 @@ def test_corpus_present_and_licensed(slug: str) -> None:
             assert declared <= MAX_DURATION_S + 1e-3, (
                 f"sidecar duration_s={declared} for {slug!r} exceeds the "
                 f"{MAX_DURATION_S}s cap (spec/10 §6)."
+            )
+        else:
+            pytest.skip(
+                f"OpenCV returned no fps/frame-count for {clip} and the sidecar "
+                f"has no usable duration_s; duration sub-check skipped (presence, "
+                f"license, and size were still enforced)."
+            )

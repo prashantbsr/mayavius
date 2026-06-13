@@ -28,3 +28,33 @@ import numpy as np
 from app.wire.encoder import encode_reconstruction
 from tests.wire._golden import golden_scene
 
+_HERE = Path(__file__).resolve()
+_BACKEND = _HERE.parents[2]                      # .../backend
+_REPO = _BACKEND.parent                          # .../mayavius
+_BACKEND_FIXTURES = _BACKEND / "tests" / "fixtures"
+_FRONTEND_FIXTURES = _REPO / "frontend" / "src" / "lib" / "wire" / "__fixtures__"
+
+# flags bits (spec/05 §3.1)
+_FLAG_HAS_DYNAMIC = 1 << 1
+# section kind (spec/05 §3.3)
+_KIND_DYNAMIC = 2
+_QMAX = 65535
+
+
+def _build_tiny_reverse_vector() -> bytes:
+    """Hand-lay the TINY REVERSE VECTOR (spec/05 §6) byte-by-byte.
+
+    Scene: T=2, NO static, one dynamic point per frame, NO tracks, NO cameras.
+    flags = HAS_DYNAMIC (0x02), fps=24.0, aabbMin=(0,0,0), aabbMax=(1,1,1),
+    sectionCount=1. This is built WITHOUT ``encode_reconstruction`` so it
+    independently guards the reverse (TS->Py) decode direction (T-203).
+
+    Total = header24 + aabb24 + directory16 + dynamic(frameDir16 + pos12 + col6
+    = 34) = 98 bytes.
+    """
+    buf = bytearray()
+
+    # ---- header — 24 bytes @0 (spec/05 §3.1) ----
+    # magic, version=1, flags=0x02, posBits=16, sectionCount=1, frameCount=2,
+    # reserved0=0, fps=24.0, reserved1=0, reserved2=0
+    buf += struct.pack(

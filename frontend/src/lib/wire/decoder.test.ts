@@ -58,3 +58,33 @@ interface GoldenExpected {
     colors: number[][];
   };
   cameras: { poses: number[][]; intrinsics: number[][] };
+}
+
+const expected: GoldenExpected = JSON.parse(
+  readFileSync(EXPECTED_PATH, "utf-8"),
+);
+
+describe("MV4D decoder — golden fixture (T-150)", () => {
+  it("decodes header/AABB and exposes zero-copy static views", () => {
+    const buffer = readArrayBuffer(GOLDEN_PATH);
+    const scene = decodeReconstruction(buffer);
+
+    expect(scene.version).toBe(1);
+    expect(scene.frameCount).toBe(expected.frameCount);
+    expect(scene.fps).toBeCloseTo(expected.fps, 5);
+    for (let i = 0; i < 3; i++) {
+      expect(scene.aabbMin[i]).toBeCloseTo(expected.aabbMin[i], 5);
+      expect(scene.aabbMax[i]).toBeCloseTo(expected.aabbMax[i], 5);
+    }
+
+    expect(scene.static).toBeDefined();
+    expect(scene.static!.count).toBe(4);
+    // Zero-copy: positionsQ is a Uint16Array VIEW over the decoded buffer.
+    expect(scene.static!.positionsQ).toBeInstanceOf(Uint16Array);
+    expect(scene.static!.positionsQ.buffer).toBe(buffer);
+    expect(scene.static!.positionsQ.length).toBe(4 * 3);
+    expect(scene.static!.colors).toBeInstanceOf(Uint8Array);
+    expect(scene.static!.colors.buffer).toBe(buffer);
+  });
+});
+

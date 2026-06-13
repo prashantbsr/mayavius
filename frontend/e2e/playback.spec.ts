@@ -58,3 +58,24 @@ test.describe("T-404 playback.toggle", () => {
         timeout: 6_000,
         intervals: [30, 60, 100],
       })
+      .toBeLessThan(0.9);
+    // Still playing after the wrap (loop did NOT pause).
+    expect(await storeField<boolean>(page, "isPlaying")).toBe(true);
+    await pauseBtn.click({ force: true });
+
+    // ── Toggle loop off → playing past 1 clamps at 1 and pauses (no wrap). ───────
+    await loopBtn.click({ force: true });
+    expect(await storeField<boolean>(page, "loop")).toBe(false);
+    await scrubTimeline(page, 'input[aria-label="Timeline"]', 0.98, 0.98, 1);
+    await playBtn.click({ force: true });
+    await expect
+      .poll(
+        async () => ({
+          time: await storeField<number>(page, "time"),
+          playing: await storeField<boolean>(page, "isPlaying"),
+        }),
+        { timeout: 6_000, intervals: [30, 60, 100] },
+      )
+      .toEqual({ time: 1, playing: false });
+  });
+});

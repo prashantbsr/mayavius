@@ -296,3 +296,93 @@ Corpus acceptance:
 
 ---
 
+## 7. Test commands & Makefile targets
+
+New dev deps to add (per [08 §2/§3](08-dependencies-and-env.md)):
+- **Frontend** (`package.json` devDeps, pin major + freeze exact after install, [08 §2](08-dependencies-and-env.md)): `vitest@^3`, `@vitejs/plugin-react@^4`, `jsdom@^26`,
+  `jsdom`, `@playwright/test`; add `vitest.config.ts` (`environment: 'jsdom'`) and
+  scripts `"test": "vitest run"`, `"test:e2e": "playwright test"`.
+- **Backend** (`requirements-dev.txt`): already has `pytest==9.0.3`,
+  `httpx==0.28.1`; the build **adds `ruff==0.14.*`** (for `make lint`; [08 §3](08-dependencies-and-env.md)),
+  nothing else for §1–§4. §5 needs `requirements-ml.txt` (deferred, not in CI).
+
+Commands:
+
+```bash
+# Backend unit + integration (no torch, default CI):
+cd backend && ./.venv/bin/python -m pytest                      # excludes mps/gpu markers
+cd backend && ./.venv/bin/python -m pytest -m "not mps and not gpu"   # explicit
+
+# Backend on-device MPS smoke (the 36 GB Mac only, opt-in):
+cd backend && MAYAVIUS_RUN_MPS_SMOKE=1 ./.venv/bin/python -m pytest -m mps -s   # -s prints recorded time/mem
+
+# Frontend unit (Vitest) + types:
+cd frontend && npm run test
+cd frontend && npx tsc --noEmit
+
+# Frontend e2e (Playwright; starts dev server + fixture-mode backend):
+cd frontend && npm run test:e2e
+```
+
+Register the markers in the **existing** `[tool.pytest.ini_options]` in
+`backend/pyproject.toml` (keep `testpaths`/`pythonpath`; extend `addopts` with
+`--strict-markers` so an **unknown marker fails** CI — registration alone only
+silences the warning):
+```toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q --strict-markers"
+markers = [
+    "mps: requires Apple-Silicon MPS + MAYAVIUS_RUN_MPS_SMOKE=1 (skipped in CI)",
+    "gpu: requires a CUDA GPU (cloud-only; never on the Mac)",
+]
+```
+
+Makefile targets — extend the existing `test-backend` / `test-frontend`
+([Makefile](../Makefile)) and **add** `test-e2e` + `test-mps`:
+
+```makefile
+test-backend: ## Run backend unit + integration (no torch/MPS)
+	cd backend && ./.venv/bin/python -m pytest -m "not mps and not gpu"
+
+test-frontend: ## Run frontend unit tests + typecheck
+	cd frontend && npm run test && npx tsc --noEmit
+
+test-e2e: ## Run Playwright e2e (fixture-mode backend; no GPU)
+	cd frontend && npm run test:e2e
+
+test-mps: ## On-device MPS smoke on the 36 GB Mac (opt-in; needs requirements-ml.txt)
+	cd backend && MAYAVIUS_RUN_MPS_SMOKE=1 ./.venv/bin/python -m pytest -m mps -s
+
+test: test-backend test-frontend ## Run the CI test set (excludes e2e + mps)
+```
+
+> `make test` (CI) = `test-backend` + `test-frontend` only. `test-e2e` and
+> `test-mps` are **separate targets** by design: e2e needs a browser + running
+> servers; `test-mps` needs the multi-GB ML deps + the actual Mac. Neither blocks
+> a clone-and-`make test` on a fresh machine — the local-first constraint, enforced
+> by the target split.
+
+---
+
+## 8. Test-id → build-task map (for spec/09 to cite)
+
+[09-execution-plan.md](09-execution-plan.md) cites these ids as acceptance gates. Summary
+of which subsystem each id family proves:
+
+| id family | subsystem | acceptance for |
+|-----------|-----------|----------------|
+| **T-100…T-103, T-105…T-107** | MV4D encoder + quantization | the encoder task (W0.T2) |
+| **T-104** | cap enforcement (`enforce_caps`) | the **service** task (W1.T1) — `enforce_caps` lives in core/services, not the encoder ([06 §5](06-backend-spec.md)) |
+| **T-120…T-122** | port / service / FakeAdapter | the core-service task |
+| **T-130** | hexagonal import guard | the architecture-boundary task (CI gate) |
+| **T-150…T-180** | decoder, store, shader dequant, types | the frontend wire + state tasks |
+| **T-200…T-203** | cross-impl golden + version parity | the wire-seam task (encoder↔decoder) |
+| **T-300…T-310** | FastAPI job lifecycle + adapter contract | the API + job-queue task |
+| **T-400…T-407** | full viewer flow (scrub/play/bullet-time/share) | the viewer + share-route tasks |
+| **T-500…T-511** | VGGT+CoTracker3 on MPS, measured | the VggtAdapter/CoTracker3Adapter task (on-device gate) |
+| **T-600…T-601** | sample corpus presence + licensing | the corpus/examples task |
+
+A task is **done** when its listed `T-xxx` are green (and, for stub→impl tasks, the
+`501` test T-301 has correctly flipped to the `2xx` lifecycle tests).

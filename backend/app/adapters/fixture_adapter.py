@@ -148,3 +148,33 @@ def _build_scene(t: int, *, fps: float) -> Scene4D:
         dynamic_positions.append(
             np.array(
                 [[x, 0.0, -1.5], [x + 0.1, 0.1, -1.5]],
+                dtype=np.float32,
+            )
+        )
+        dynamic_colors.append(
+            np.array([[250, 120, 0], [250, 160, 40]], dtype=np.uint8)
+        )
+
+    # --- tracks: 2 polylines, mixed visibility, traversing the dynamic motion. ---
+    xs = np.linspace(-0.6, 0.6, t, dtype=np.float32)
+    track0 = np.stack(
+        [xs, np.full(t, 0.0, dtype=np.float32), np.full(t, -1.5, dtype=np.float32)],
+        axis=1,
+    )
+    track1 = np.stack(
+        [xs * 0.5, np.full(t, 0.3, dtype=np.float32), np.full(t, -1.7, dtype=np.float32)],
+        axis=1,
+    )
+    track_positions = np.stack([track0, track1], axis=0)  # (2, t, 3)
+    # Mixed visibility: track 0 hidden on the first frame, track 1 hidden on the last.
+    visibility = np.ones((2, t), dtype=bool)
+    visibility[0, 0] = False
+    visibility[1, t - 1] = False
+    track_colors = np.array([[255, 0, 0], [0, 255, 0]], dtype=np.uint8)
+    tracks = Tracks(
+        positions=track_positions,
+        visibility=visibility,
+        colors=track_colors,
+    )
+
+    # --- cameras: identity rotation (xyzw), slowly translating, normalized intrinsics. ---

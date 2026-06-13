@@ -88,3 +88,33 @@ def decode(buffer: bytes) -> Scene4D:
     # ---- AABB block (spec/05 §3.2) ----
     aabb = struct.unpack_from("<6f", buf, _HEADER_BYTES)
     aabb_min = np.array(aabb[0:3], dtype=np.float32)
+    aabb_max = np.array(aabb[3:6], dtype=np.float32)
+
+    # ---- section directory (spec/05 §3.3) ----
+    dir_offset = _HEADER_BYTES + _AABB_BYTES
+    entries: list[tuple[int, int, int, int]] = []
+    for i in range(section_count):
+        kind, byte_offset, byte_length, count = struct.unpack_from(
+            "<IIII", buf, dir_offset + i * _DIR_ENTRY_BYTES
+        )
+        if byte_offset + byte_length > len(buf):
+            raise ValueError(
+                f"section kind={kind} exceeds buffer: "
+                f"offset={byte_offset} length={byte_length} buflen={len(buf)}"
+            )
+        entries.append((int(kind), int(byte_offset), int(byte_length), int(count)))
+
+    has_static_conf = bool(flags & _FLAG_HAS_STATIC_CONF)
+    has_track_color = bool(flags & _FLAG_HAS_TRACK_COLOR)
+
+    static_positions = np.empty((0, 3), dtype=np.float32)
+    static_colors = np.empty((0, 3), dtype=np.uint8)
+    static_conf: np.ndarray | None = None
+    dynamic_positions: list[np.ndarray] = [np.empty((0, 3), np.float32) for _ in range(frame_count)]
+    dynamic_colors: list[np.ndarray] = [np.empty((0, 3), np.uint8) for _ in range(frame_count)]
+    tracks: Tracks | None = None
+    cameras: CameraTrack | None = None
+
+    for kind, off, length, count in entries:
+        if kind == _KIND_STATIC:
+            n = count

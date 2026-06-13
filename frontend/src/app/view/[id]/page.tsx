@@ -1,30 +1,56 @@
 import type { Metadata } from "next";
 import { ViewerClient } from "@/components/viewer/ViewerClient";
-import { SITE_NAME } from "@/config";
+import { EXAMPLE_SLUGS, SITE_NAME } from "@/config";
 
 // Shareable result route. This is the SEO/virality surface: a pasted result
 // link renders a rich preview card (title + Open Graph image) so it is
-// screenshot-able and shareable (handover §5 "star mechanics").
+// screenshot-able and shareable (handover §5 "star mechanics", spec/07 §8).
 type Props = { params: Promise<{ id: string }> };
+
+/** Example/user classification with no backend round-trip (spec/07 §8): an id is
+ * an example iff it is in `EXAMPLE_SLUGS` (server-only list, mirrors the backend
+ * pinned seed slugs — spec/06 §6). `EXAMPLE_SLUGS` is `readonly`, so widen for
+ * `.includes`. */
+function isExample(id: string): boolean {
+  return (EXAMPLE_SLUGS as readonly string[]).includes(id);
+}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params; // params is async in Next 16 — must be awaited
-  const title = `Reconstruction ${id}`;
-  const description = `An interactive 4D reconstruction on ${SITE_NAME}.`;
+  const example = isExample(id);
+
+  const title = example
+    ? `Example scene · ${SITE_NAME}`
+    : `Reconstruction ${id}`;
+  const description = example
+    ? `Orbit a pre-seeded 4D reconstruction example on ${SITE_NAME} — no upload, no GPU.`
+    : `An interactive 4D reconstruction on ${SITE_NAME}.`;
+  const canonical = `/view/${id}`;
+
   return {
     title,
     description,
-    alternates: { canonical: `/view/${id}` },
-    // User-generated result pages stay out of the search index.
-    robots: { index: false, follow: false },
+    alternates: { canonical },
+    // Example results (D10) are indexable so they earn organic traffic and seed
+    // the share loop (spec/07 §8). User-generated results stay out of the index
+    // (avoid indexing junk) but still emit rich OG/twitter cards below.
+    robots: example
+      ? { index: true, follow: true }
+      : { index: false, follow: false },
+    // opengraph-image.tsx overrides og:image for this route; these tags carry
+    // the title/description/url that make the pasted link a rich card.
     openGraph: {
       type: "website",
+      siteName: SITE_NAME,
+      url: canonical,
       title,
       description,
-      // TODO(spec/11): per-result dynamic OG image via next/og for share cards.
-      images: [{ url: "/og.png", width: 1200, height: 630, alt: title }],
     },
-    twitter: { card: "summary_large_image", title, description, images: ["/og.png"] },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
   };
 }
 

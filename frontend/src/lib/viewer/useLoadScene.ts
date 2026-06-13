@@ -58,3 +58,7 @@ export function useLoadScene(resultId: string): void {
       },
     });
 
+    // Tear down the stream/poll loop on unmount or when the id changes.
+    return stop;
+  }, [resultId, setLoadState, setProgress, setScene, setError, setWeightsLicense]);
+}

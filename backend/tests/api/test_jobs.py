@@ -28,3 +28,33 @@ def _multipart(content_type: str = "video/mp4", body: bytes = _TINY_MP4):
 
 
 def _poll_until_terminal(client, job_id: str, *, timeout_s: float = 10.0):
+    """Poll ``GET /jobs/{id}`` until DONE/FAILED, collecting every observed body."""
+    deadline = time.time() + timeout_s
+    observed: list[dict] = []
+    while time.time() < deadline:
+        r = client.get(f"/jobs/{job_id}")
+        assert r.status_code == 200
+        body = r.json()
+        observed.append(body)
+        if body["status"] in ("done", "failed"):
+            return observed
+        time.sleep(0.02)
+    raise AssertionError(f"job {job_id} never reached a terminal state: {observed[-3:]}")
+
+
+# --- T-302 ---------------------------------------------------------------------
+def test_job_submit_returns_id(client) -> None:
+    r = client.post("/jobs", files=_multipart())
+    assert r.status_code == 202
+    body = r.json()
+    assert "job_id" in body and body["job_id"]
+    assert body["status"] == "queued"
+    assert body["poll"] == f"/jobs/{body['job_id']}"
+    assert body["stream"] == f"/jobs/{body['job_id']}/stream"
+    assert body["result"] == f"/jobs/{body['job_id']}/result"
+
+
+# --- T-303 ---------------------------------------------------------------------
+def test_job_lifecycle_poll(client) -> None:
+    job_id = client.post("/jobs", files=_multipart()).json()["job_id"]
+    observed = _poll_until_terminal(client, job_id)

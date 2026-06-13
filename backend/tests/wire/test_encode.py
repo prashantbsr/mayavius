@@ -148,3 +148,33 @@ def test_t100_roundtrip_all_sections():
     for t in range(scene.frame_count):
         np.testing.assert_array_equal(out.dynamic_colors[t], scene.dynamic_colors[t])
     np.testing.assert_array_equal(out.tracks.colors, scene.tracks.colors)
+    np.testing.assert_array_equal(out.static_conf, scene.static_conf)
+    assert out.static_colors.dtype == np.uint8
+    assert out.tracks.colors.dtype == np.uint8
+
+    # visibility bitmask exact
+    np.testing.assert_array_equal(out.tracks.visibility, scene.tracks.visibility)
+    assert out.tracks.visibility.dtype == bool
+
+    # cameras within f32
+    np.testing.assert_allclose(out.cameras.poses, scene.cameras.poses, rtol=0, atol=1e-6)
+    np.testing.assert_allclose(out.cameras.intrinsics, scene.cameras.intrinsics, rtol=0, atol=1e-6)
+
+    # positions within quantization tolerance (per-axis, see T-101)
+    span = (out.aabb_max - out.aabb_min).astype(np.float32)
+    tol = span / 65535.0
+    np.testing.assert_array_less(
+        np.abs(out.static_positions - scene.static_positions).max(axis=0), tol + 1e-6
+    )
+    for t in range(scene.frame_count):
+        if scene.dynamic_positions[t].shape[0]:
+            err = np.abs(out.dynamic_positions[t] - scene.dynamic_positions[t]).max(axis=0)
+            np.testing.assert_array_less(err, tol + 1e-6)
+    track_err = np.abs(out.tracks.positions - scene.tracks.positions).reshape(-1, 3).max(axis=0)
+    np.testing.assert_array_less(track_err, tol + 1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# T-101 — quantization tolerance + degenerate axis
+# --------------------------------------------------------------------------- #
+def test_t101_quantization_tolerance():

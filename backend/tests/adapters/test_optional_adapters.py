@@ -118,3 +118,29 @@ def test_optional_adapter_raises_unsupported_device_on_cpu(
 # Per-adapter skip reason NAMING the constraint (spec/10 §3 negative-knowledge gate).
 _GPU_SKIP_REASON = {
     "spatialtracker_v2": "SpatialTrackerV2 is CUDA-only (upstream cu124 pin) — needs a CUDA GPU (spec/11)",
+    "pi3": "Pi3 has no official MPS (PR #153 unmerged), CUDA-only — needs a CUDA GPU (spec/11)",
+    "open_d4rt": "OpenD4RT MPS is unverified — runs only on the cloud GPU deploy (spec/11)",
+}
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("module_name, class_name, constraint", _OPTIONAL_ADAPTERS)
+def test_optional_adapter_gpu_contract(module_name, class_name, constraint) -> None:
+    """GPU-only contract: on a CUDA device the adapter must NOT refuse the device.
+
+    SKIPPED on the Mac (no CUDA) with a reason NAMING the constraint — documented as
+    skipped, not silently absent (spec/10 §3/§5 negative-knowledge gate; no green MPS
+    test for these dead ends). On a real CUDA box the device is accepted (no
+    ``UnsupportedDeviceError``); the model path itself is a future cloud-deploy task,
+    so ``NotImplementedError`` is the expected stub outcome.
+    """
+    adapter = _build(module_name, class_name)
+    if not _cuda_available():
+        pytest.skip(_GPU_SKIP_REASON[adapter.info.name])
+
+    req = ReconstructionRequest(video_path="(ignored)", max_frames=4, device="cuda")
+    # CUDA is present: "cuda" is accepted (not an UnsupportedDeviceError); the unbuilt
+    # model path raises NotImplementedError (the expected cloud-deploy stub state).
+    with pytest.raises(NotImplementedError):
+        adapter.reconstruct(req)
+    assert constraint  # the constraint keyword is part of the parametrization intent

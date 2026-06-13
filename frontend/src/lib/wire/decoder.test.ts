@@ -178,3 +178,33 @@ describe("MV4D decoder — error contract (T-153, T-154)", () => {
     expect(() => decodeReconstruction(buffer)).toThrow(Mv4dDecodeError);
   });
 
+  it("misaligned section offset throws Mv4dDecodeError — T-154", () => {
+    const buffer = readArrayBuffer(GOLDEN_PATH);
+    const view = new DataView(buffer);
+    // First directory entry's byteOffset (dir@48, +4) → not 8-aligned (and in
+    // bounds so the overflow check passes first).
+    view.setUint32(48 + 4, 113, true); // 113 % 8 != 0, < buffer length
+    view.setUint32(48 + 8, 4, true); // small length so it stays in bounds
+    expect(() => decodeReconstruction(buffer)).toThrow(Mv4dDecodeError);
+  });
+});
+
+describe("MV4D decoder — version constant (T-155)", () => {
+  it("exports MV4D_VERSION === 1", () => {
+    expect(MV4D_VERSION).toBe(1);
+  });
+});
+
+describe("MV4D dequantize helper (T-160)", () => {
+  it("matches the encoder inverse p = min + q/65535*(max-min)", () => {
+    expect(dequantize(0, 0, 1)).toBeCloseTo(0, 9);
+    expect(dequantize(65535, 0, 1)).toBeCloseTo(1, 9);
+    expect(dequantize(32768, 0, 1)).toBeCloseTo(32768 / 65535, 9);
+    // arbitrary AABB axis
+    const min = -2.5;
+    const max = 4.0;
+    for (const q of [0, 1, 1000, 30000, 65535]) {
+      expect(dequantize(q, min, max)).toBeCloseTo(
+        min + (q / 65535) * (max - min),
+        9,
+      );

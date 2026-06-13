@@ -28,3 +28,33 @@ import numpy as np
 # OpenCV -> mayavius axis flip (spec/06 §4.1a). F == F^-1.
 _F = np.array([1.0, -1.0, -1.0], dtype=np.float32)
 
+
+def _normalize_intrinsics(intrinsics: np.ndarray, T: int) -> np.ndarray:
+    """Coerce per-frame intrinsics to ``(T, 4)`` float32 ``(fx, fy, cx, cy)`` (pixels).
+
+    Accepts either ``(T, 4)`` already, a single ``(4,)`` broadcast across frames, a
+    ``(T, 3, 3)`` pixel K-matrix stack, or a single ``(3, 3)`` K broadcast.
+    """
+    arr = np.asarray(intrinsics, dtype=np.float32)
+    if arr.ndim == 1 and arr.shape == (4,):
+        return np.broadcast_to(arr, (T, 4)).astype(np.float32).copy()
+    if arr.ndim == 2 and arr.shape == (T, 4):
+        return arr.copy()
+    if arr.ndim == 2 and arr.shape == (3, 3):
+        fx, fy, cx, cy = arr[0, 0], arr[1, 1], arr[0, 2], arr[1, 2]
+        row = np.array([fx, fy, cx, cy], dtype=np.float32)
+        return np.broadcast_to(row, (T, 4)).astype(np.float32).copy()
+    if arr.ndim == 3 and arr.shape == (T, 3, 3):
+        out = np.empty((T, 4), dtype=np.float32)
+        out[:, 0] = arr[:, 0, 0]
+        out[:, 1] = arr[:, 1, 1]
+        out[:, 2] = arr[:, 0, 2]
+        out[:, 3] = arr[:, 1, 2]
+        return out
+    raise ValueError(
+        f"intrinsics must be (T,4), (4,), (T,3,3) or (3,3); got shape {arr.shape} for T={T}"
+    )
+
+
+def _normalize_c2w(c2w: np.ndarray, T: int) -> np.ndarray:
+    """Coerce camera->world transforms to ``(T, 4, 4)`` float32.

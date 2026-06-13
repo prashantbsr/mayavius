@@ -358,3 +358,33 @@ def _moving_nodes_at(tr: TrackResult, t: int, motion_thresh_pct: float, abs_floo
 def _normalize_conf_u8(conf: np.ndarray) -> np.ndarray:
     """Per-scene min-max normalize confidence → uint8 ``[0,255]`` (spec/06 §5 step 6 note).
 
+    ``clip(round(((c - min)/(max - min)) * 255), 0, 255)``. Degenerate range
+    (all-equal) → all 255 (max confidence). Empty → empty u8.
+    """
+    c = np.asarray(conf, dtype=np.float32).reshape(-1)
+    if c.size == 0:
+        return np.empty((0,), dtype=np.uint8)
+    cmin = float(c.min())
+    cmax = float(c.max())
+    if cmax <= cmin:
+        return np.full(c.shape[0], 255, dtype=np.uint8)
+    norm = (c - np.float32(cmin)) / np.float32(cmax - cmin)
+    q = np.clip(np.rint(norm * np.float32(255.0)), 0, 255)
+    return q.astype(np.uint8)
+
+
+def _frame_colors(geo: GeometryResult, t: int, finite_mask: np.ndarray) -> np.ndarray:
+    """Per-point RGB ``u8`` for frame ``t``'s VGGT points, filtered by ``finite_mask``.
+
+    A real combo passes the decoded source frame so VGGT points inherit pixel color.
+    When no color source is attached to ``geo`` (``colors`` attr), fall back to a
+    neutral mid-gray so the ``dynamic_colors``/``static_colors`` contract (aligned to
+    positions, u8 RGB) always holds. Returns ``(K, 3)`` u8 where ``K = finite.sum()``.
+    """
+    colors = getattr(geo, "colors", None)
+    n_full = int(finite_mask.shape[0])
+    if colors is not None:
+        arr = np.asarray(colors)
+        # Accept (S,H,W,3) or (S,H*W,3) or (S,N,3).
+        if arr.ndim == 4:
+            cf = arr[t].reshape(-1, 3)

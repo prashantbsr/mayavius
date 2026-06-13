@@ -28,3 +28,33 @@ test.describe("T-402 upload.flow", () => {
 
     // Drive the hidden <input type=file> directly (the dropzone's picker).
     await page.getByTestId("upload-input").setInputFiles(TINY_MP4);
+
+    // UploadDropzone validates type+size, POSTs /jobs, then router.push to
+    // /view/<jobId>. Wait for that navigation (a 32-hex job id, not "example").
+    await page.waitForURL(/\/view\/[0-9a-f]{8,}$/, { timeout: 30_000 });
+
+    // The viewer mounts the always-on progress recorder (installed BEFORE the
+    // loader effect — testObservability.ts) so every progress value the loader
+    // writes is captured: the FixtureAdapter's 0.25 / 0.75 progression, then 1.0
+    // on done. Wait for the recorder to exist before asserting on it.
+    await page.waitForFunction(
+      () => Array.isArray(window.__mayaviusProgressLog),
+      undefined,
+      { timeout: 30_000 },
+    );
+
+    // Terminal reveal: a real static cloud rendered.
+    await page.waitForSelector("canvas", { timeout: 30_000 });
+    await expect
+      .poll(() => debugNumber(page, "staticPointCount", -1), {
+        timeout: 30_000,
+        intervals: [100, 200, 300],
+      })
+      .toBeGreaterThan(0);
+
+    // Observed-set assertion (race-free, mirror of T-303's framing): over the run
+    // the store's progress held at least one intermediate value 0<p<1 AND reached
+    // terminal progress 1. We assert against the captured history, never a single
+    // mid-flight DOM frame. (We do NOT assert global monotonicity here: the SSE
+    // late-subscriber path legitimately replays the buffered running events, which
+    // can revisit a lower value — that is T-303's poll-ordering concern, not this

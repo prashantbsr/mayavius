@@ -148,3 +148,33 @@ def test_events_streams_through_to_terminal(tmp_path):
         return collected
 
     events = asyncio.new_event_loop().run_until_complete(scenario())
+
+    assert events, "expected at least one event"
+    assert events[-1].event in (JobStatus.DONE.value, JobStatus.FAILED.value)
+    assert events[-1].event == JobStatus.DONE.value
+    # Monotonic non-decreasing progress, ending at 1.0.
+    progresses = [e.data["progress"] for e in events]
+    assert progresses == sorted(progresses)
+    assert progresses[-1] == 1.0
+
+
+def test_seed_example_registers_done_job(tmp_path):
+    """seed_example registers a terminal DONE job under id == slug."""
+    queue = _make_queue(tmp_path)
+    queue.seed_example("example", "/some/path/example.mv4d")
+
+    job = queue.status("example")
+    assert job.status is JobStatus.DONE
+    assert job.progress == 1.0
+    assert job.stage == "done"
+    assert job.result_path == "/some/path/example.mv4d"
+    assert job.adapter_id == "fixture"
+    assert job.weights_license == "none"
+
+    payload = job_to_json(job)
+    assert payload["status"] == "done"
+    assert payload["result"] == "/jobs/example/result"
+    assert "error" not in payload
+
+
+class _RaisingAdapter(ReconstructionPort):

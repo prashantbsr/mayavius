@@ -298,3 +298,33 @@ def assemble_scene4d(
     # ---- final AABB over EVERYTHING that ends up in the scene.
     all_dyn = np.concatenate(dynamic_positions, axis=0) if any(p.size for p in dynamic_positions) else np.empty((0, 3), np.float32)
     f_amin, f_amax, _ = _aabb_over(static_p, all_dyn, tr_pos.reshape(-1, 3))
+
+    tracks = Tracks(
+        positions=tr_pos,
+        visibility=tr_vis,
+        colors=tr_col if tr_col.size else None,
+    )
+
+    scene = Scene4D(
+        frame_count=int(T),
+        fps=fps,
+        aabb_min=f_amin,
+        aabb_max=f_amax,
+        static_positions=static_p,
+        static_colors=static_c,
+        static_conf=static_conf_u8 if static_conf_u8.size else None,
+        dynamic_positions=dynamic_positions,
+        dynamic_colors=dynamic_colors,
+        tracks=tracks,
+        cameras=geo.camera,
+    )
+
+    logger.info(
+        "assemble: S=%d T=%d static=%d dynamic_total=%d tracks=%d radius=%.4g voxel=%.4g "
+        "motion_floor=%.4g fallback=%s",
+        S,
+        int(T),
+        int(static_p.shape[0]),
+        int(all_dyn.shape[0]),
+        int(tr_pos.shape[0]),
+        radius,

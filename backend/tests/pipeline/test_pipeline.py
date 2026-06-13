@@ -208,3 +208,33 @@ def test_compute_aabb_over_multiple_sets() -> None:
     amin, amax = compute_aabb(a, b, c)
     assert np.array_equal(amin, np.array([-4.0, -2.0, 0.0], dtype=np.float32))
     assert np.array_equal(amax, np.array([1.0, 5.0, 3.0], dtype=np.float32))
+
+
+# ---------------------------------------------------------------------------
+# (c) assemble_scene4d — static/dynamic split sanity + RAW (no caps)
+# ---------------------------------------------------------------------------
+
+def _synthetic_geo_and_tracks(seed: int = 3):
+    """Build a synthetic GeometryResult + TrackResult with one obviously-moving track.
+
+    Geometry: S=4 frames of a flat static plane of points (z=0), PLUS a tight cluster
+    of points around a moving location that translates frame-to-frame. One CoTracker
+    track follows the moving cluster (large inter-frame displacement); a second track
+    is stationary (and so must NOT mark the static plane dynamic).
+    """
+    rng = np.random.default_rng(seed)
+    S = 4
+    H, W = 8, 8  # 64 plane points/frame
+
+    # Static plane: a fixed grid on z=0 in [0,4]^2, identical every frame.
+    gx, gy = np.meshgrid(np.linspace(0.0, 4.0, W), np.linspace(0.0, 4.0, H))
+    plane = np.stack([gx, gy, np.zeros_like(gx)], axis=-1).astype(np.float32)  # (H,W,3)
+
+    # Moving cluster center translates +x each frame, far from the plane (z high).
+    centers = [np.array([10.0 + 3.0 * t, 10.0, 5.0], dtype=np.float32) for t in range(S)]
+
+    world_points = np.zeros((S, H, W, 3), dtype=np.float32)
+    colors = np.zeros((S, H, W, 3), dtype=np.uint8)
+    conf = np.zeros((S, H, W), dtype=np.float32)
+    for t in range(S):
+        wp = plane.copy()

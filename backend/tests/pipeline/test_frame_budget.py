@@ -28,3 +28,13 @@ def test_square_clip_capped_under_budget():
 
 def test_landscape_clip_allows_more_frames():
     # 518×280 (16:9) => 37×20 = 740 tokens/frame; 16 frames = 11840 <= 12000 -> kept.
+    out = cap_frames_to_token_budget(_frames(16, 280, 518), budget=12000)
+    assert out.shape[0] == 16
+
+
+def test_within_budget_unchanged_and_endpoints_kept():
+    fr = _frames(6, 280, 518)
+    out = cap_frames_to_token_budget(fr, budget=12000)
+    assert out.shape[0] == 6  # already under budget
+    # A tiny S is never dropped below 2.
+    assert cap_frames_to_token_budget(_frames(2, 518, 518), budget=1).shape[0] == 2

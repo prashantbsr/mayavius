@@ -118,3 +118,33 @@ def _build_scene(t: int, *, fps: float) -> Scene4D:
             [1.0, -1.0, -2.0],
             [-1.0, 1.0, -2.0],
             [1.0, 1.0, -2.0],
+            [0.0, 0.0, -2.5],
+        ],
+        dtype=np.float32,
+    )
+    static_colors = np.array(
+        [
+            [200, 30, 30],
+            [30, 200, 30],
+            [30, 30, 200],
+            [200, 200, 30],
+            [128, 128, 128],
+        ],
+        dtype=np.uint8,
+    )
+    # All conf > 127 so the default conf cull (thresh 0.5 -> 127.5) keeps every point.
+    static_conf = np.array([255, 240, 220, 200, 180], dtype=np.uint8)
+
+    # --- dynamic foreground: a small cluster sweeping left->right over time. ---
+    # Frame index t==1 is intentionally EMPTY (>=1 empty dynamic frame; spec/05 §3.5).
+    dynamic_positions: list[np.ndarray] = []
+    dynamic_colors: list[np.ndarray] = []
+    for f in range(t):
+        if f == 1:
+            dynamic_positions.append(np.zeros((0, 3), dtype=np.float32))
+            dynamic_colors.append(np.zeros((0, 3), dtype=np.uint8))
+            continue
+        x = -0.6 + 1.2 * (f / max(t - 1, 1))
+        dynamic_positions.append(
+            np.array(
+                [[x, 0.0, -1.5], [x + 0.1, 0.1, -1.5]],

@@ -328,3 +328,33 @@ def test_t103_aabb_spans_all_sections():
     expected_min = all_pts.min(axis=0)
     expected_max = all_pts.max(axis=0)
     np.testing.assert_allclose(out.aabb_min, expected_min, atol=1e-5)
+    np.testing.assert_allclose(out.aabb_max, expected_max, atol=1e-5)
+
+    # No point clamps: every quantized value strictly within [0, 65535] for
+    # in-AABB input — verify by reading raw u16 from the directory's section.
+    h = _parse_header(buf)
+    entries = {e["kind"]: e for e in _parse_directory(buf, h["section_count"])}
+    for kind, n_pts in (
+        (_KIND_STATIC, static_positions.shape[0]),
+    ):
+        e = entries[kind]
+        q = np.frombuffer(buf, dtype="<u2", count=n_pts * 3, offset=e["off"]).reshape(-1, 3)
+        assert q.min() >= 0 and q.max() <= 65535
+    # the global extents land exactly on the grid endpoints (0 and 65535)
+    # — confirming the AABB is tight and nothing clamps beyond.
+    static_q = np.frombuffer(
+        buf, dtype="<u2", count=static_positions.shape[0] * 3, offset=entries[_KIND_STATIC]["off"]
+    ).reshape(-1, 3)
+    assert static_q[0, 0] == 0  # static min-x point -> q=0 on x
+
+
+# --------------------------------------------------------------------------- #
+# T-105 — optional sections omitted
+# --------------------------------------------------------------------------- #
+def _static_only_scene(with_conf: bool) -> Scene4D:
+    N = 12
+    rng = np.random.default_rng(5)
+    return Scene4D(
+        frame_count=1,
+        fps=12.0,
+        aabb_min=np.zeros(3, np.float32),

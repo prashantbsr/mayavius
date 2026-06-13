@@ -28,3 +28,8 @@ test.describe("T-400 landing.loads", () => {
 
     // The upload affordance (the only producer of submitClip) is on the landing.
     await expect(page.getByTestId("upload-dropzone")).toBeVisible();
+
+    // The viewer is client-only + lazy: no canvas on the landing (spec/07 §1).
+    await expect(page.locator("canvas")).toHaveCount(0);
+  });
+});

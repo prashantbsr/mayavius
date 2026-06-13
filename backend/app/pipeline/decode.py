@@ -118,3 +118,33 @@ def _to_chw_rgb_518(frames_hwc_rgb: list[np.ndarray]) -> np.ndarray:
 
     out = np.empty((len(frames_hwc_rgb), 3, new_h, new_w), dtype=np.uint8)
     try:
+        import cv2  # lazy; resize only
+
+        _resize = lambda im: cv2.resize(im, (new_w, new_h), interpolation=cv2.INTER_AREA)  # noqa: E731
+    except Exception:  # pragma: no cover - exercised only without cv2
+        def _resize(im: np.ndarray) -> np.ndarray:
+            ys = (np.linspace(0, im.shape[0] - 1, new_h)).round().astype(np.int64)
+            xs = (np.linspace(0, im.shape[1] - 1, new_w)).round().astype(np.int64)
+            return im[ys][:, xs]
+
+    for i, im in enumerate(frames_hwc_rgb):
+        rgb = np.ascontiguousarray(im[..., :3]).astype(np.uint8)
+        if (rgb.shape[1], rgb.shape[0]) != (new_w, new_h):
+            rgb = _resize(rgb)
+        out[i] = np.transpose(rgb, (2, 0, 1))  # HWC -> CHW
+    return out
+
+
+def _decode_cv2(video_path: str) -> tuple[list[np.ndarray], float]:
+    """Decode all frames via cv2 → (list of HWC RGB uint8 frames, source fps).
+
+    Returns an empty list (not a raise) if the container cannot be opened, so the
+    caller can fall back to imageio. cv2 yields BGR — converted to RGB here.
+    """
+    import cv2  # lazy
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        cap.release()
+        return [], 0.0
+    src_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)

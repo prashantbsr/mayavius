@@ -88,3 +88,33 @@ def test_optional_adapter_raises_unsupported_device_on_mps(
         adapter.reconstruct(req)
 
     msg = str(exc_info.value)
+    assert constraint in msg, (
+        f"{class_name} message must name the constraint {constraint!r}: {msg!r}"
+    )
+    # Points at the cloud-GPU deploy (spec/11) — the documented remedy.
+    assert "spec/11" in msg, f"{class_name} message must point at spec/11: {msg!r}"
+    # The stable error code is surfaced to the API (spec/06 §2.2).
+    assert exc_info.value.code == "unsupported_device"
+
+
+# --- UNMARKED: also refuse "cpu" (the other Mac-local device) ----------------------
+@pytest.mark.parametrize("module_name, class_name, constraint", _OPTIONAL_ADAPTERS)
+def test_optional_adapter_raises_unsupported_device_on_cpu(
+    module_name, class_name, constraint
+) -> None:
+    """Each optional adapter also raises ``UnsupportedDeviceError`` on device "cpu"."""
+    adapter = _build(module_name, class_name)
+    req = ReconstructionRequest(video_path="(ignored)", max_frames=4, device="cpu")
+    with pytest.raises(UnsupportedDeviceError) as exc_info:
+        adapter.reconstruct(req)
+    assert "spec/11" in str(exc_info.value)
+
+
+# --- @pytest.mark.gpu: the on-(cloud)-device contract — SKIPPED on the Mac ----------
+# Negative knowledge (spec/10 §5): no green MPS test for these dead ends. The gpu
+# marker means these are collected + SKIPPED on a Mac with a reason naming the
+# constraint, never errored. On a real CUDA box (where the marker is selected) they
+# would exercise the actual model path (a future cloud-deploy task).
+# Per-adapter skip reason NAMING the constraint (spec/10 §3 negative-knowledge gate).
+_GPU_SKIP_REASON = {
+    "spatialtracker_v2": "SpatialTrackerV2 is CUDA-only (upstream cu124 pin) — needs a CUDA GPU (spec/11)",

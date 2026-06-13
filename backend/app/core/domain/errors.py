@@ -28,3 +28,26 @@ class ClipTooLongError(ReconstructionError):
 
     code = "clip_too_long"
 
+
+class UnsupportedMediaError(ReconstructionError):
+    """Undecodable upload / not a video."""
+
+    code = "unsupported_media"
+
+
+class ModelLoadError(ReconstructionError):
+    """Weights download / model init failed."""
+
+    code = "model_load_failed"
+
+
+class InferenceError(ReconstructionError):
+    """Runtime failure (e.g. an MPS op gap / OOM mid-run)."""
+
+    code = "inference_failed"
+
+
+class EmptyReconstructionError(ReconstructionError):
+    """Reconstruction produced 0 usable points (culling removed everything)."""
+
+    code = "empty_reconstruction"

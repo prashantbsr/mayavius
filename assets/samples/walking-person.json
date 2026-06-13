@@ -1,0 +1,8 @@
+{
+  "name": "walking-person",
+  "source_url": "https://commons.wikimedia.org/wiki/File:Video_Codec_Test_pedestrian_area_1080p25.y4m.webm",
+  "license": "CC0-1.0",
+  "attribution": "Taurus Media Technik (CC0, no attribution required). Source: Wikimedia Commons.",
+  "duration_s": 2.47,
+  "expected": "Moving subject (a person walking across the pedestrian street) animates as a colored point cluster trailing motion ribbons over a stable background cloud (storefronts, paving, parked bikes); tracks follow the limbs/torso."
+}

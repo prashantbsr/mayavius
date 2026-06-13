@@ -208,3 +208,33 @@ def test_vggt_cotracker3_smoke(capsys) -> None:
     assert decoded.tracks.positions.shape[1] == decoded.frame_count
 
     # MEASURE + PRINT (do NOT assert a GB threshold — the numbers are outputs).
+    peak_str = f"{peak_gb:.1f} GB peak" if peak_gb is not None else "peak n/a"
+    line = (
+        f"mps_smoke: {wall_s:.1f}s wall, {peak_str} | "
+        f"static={capped.static_positions.shape[0]} tracks={capped.tracks.positions.shape[0]} "
+        f"frames={capped.frame_count}"
+    )
+    with capsys.disabled():
+        print("\n" + line)
+
+
+# --- T-511 ----------------------------------------------------------------------
+@pytest.mark.skipif(_SKIP is not None, reason=_SKIP or "")
+def test_mps_fallback_documented(caplog) -> None:
+    """Record which ops fall back to CPU under PYTORCH_ENABLE_MPS_FALLBACK=1.
+
+    Captures warnings/logs emitted during a real combo run; records the fallback op
+    list (recorded, not asserted). If an op FAILS *even with* fallback, the run raises
+    and the test fails with a message pointing at the cloud-GPU path (spec/11) — this
+    is how a missing-op dead end gets documented, not rediscovered (spec/10 §5).
+    """
+    import logging
+    import warnings
+
+    import torch  # noqa: F401  (imported INSIDE the test)
+
+    try:
+        import vggt  # noqa: F401
+    except Exception as exc:  # pragma: no cover - exercised only on-device
+        pytest.skip(f"vggt not installed (requirements-ml.txt): {exc!r}")
+

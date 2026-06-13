@@ -148,3 +148,33 @@ describe("MV4D decoder — error contract (T-153, T-154)", () => {
   it("bad magic throws typed Mv4dDecodeError (not a generic Error) — T-153", () => {
     const buffer = readArrayBuffer(GOLDEN_PATH);
     new Uint8Array(buffer)[0] = 0x00; // corrupt the magic
+    let caught: unknown;
+    try {
+      decodeReconstruction(buffer);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Mv4dDecodeError);
+    expect(() => decodeReconstruction(buffer)).toThrow(Mv4dDecodeError);
+  });
+
+  it("version=2 throws Mv4dDecodeError — T-154", () => {
+    const buffer = readArrayBuffer(GOLDEN_PATH);
+    new Uint8Array(buffer)[4] = 2; // version byte
+    expect(() => decodeReconstruction(buffer)).toThrow(Mv4dDecodeError);
+  });
+
+  it("posBits != 16 throws Mv4dDecodeError — T-154", () => {
+    const buffer = readArrayBuffer(GOLDEN_PATH);
+    new Uint8Array(buffer)[6] = 8; // posBits byte
+    expect(() => decodeReconstruction(buffer)).toThrow(Mv4dDecodeError);
+  });
+
+  it("section bounds overflow throws Mv4dDecodeError — T-154", () => {
+    const buffer = readArrayBuffer(GOLDEN_PATH);
+    const view = new DataView(buffer);
+    // First directory entry's byteLength (dir@48, +8) → absurdly large.
+    view.setUint32(48 + 8, 0xffffffff, true);
+    expect(() => decodeReconstruction(buffer)).toThrow(Mv4dDecodeError);
+  });
+

@@ -52,3 +52,14 @@ backend/outputs/
 # --- OS / editor ---
 .DS_Store
 *.log
+
+# --- Internal / personal build docs (kept local; not for the public repo) ---
+# Already-committed ones stay in git HISTORY until it is rewritten
+# (git filter-repo) or the project is re-published as a fresh repo.
+CLAUDE.md
+**/CLAUDE.md
+AGENTS.md
+**/AGENTS.md
+EXECUTE.md
+SPEC_BUILD_HANDOVER.md
+MAYAVIUS_UX_PRODUCTION_ANALYSIS.md

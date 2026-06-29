@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     motion_thresh: float = 0.95
     #: Confidence-cull floor for static points (06 §5 step 6).
     conf_thresh: float = 0.5
+    #: Per-job inference deadline (s). A stuck MPS op or a cold multi-GB weight
+    #: download is FAILED (not left hanging) after this many seconds, so an
+    #: awaiting SSE client always sees a terminal event (spec/06 §6 reliability).
+    job_timeout_s: int = 180
     #: VGGT checkpoint id (commercial swap = facebook/VGGT-1B-Commercial, 06 §4.1).
     vggt_weights: str = "facebook/VGGT-1B"
     #: Result blob store, resolved ABSOLUTE to backend/outputs (06 §8); served by /result.

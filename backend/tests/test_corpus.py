@@ -125,3 +125,80 @@ def test_corpus_present_and_licensed(slug: str) -> None:
                 f"has no usable duration_s; duration sub-check skipped (presence, "
                 f"license, and size were still enforced)."
             )
+
+
+# A healthy static cloud is at least this many points — the negative-control bug
+# baked ~3 static points (a degenerate split), so any sane re-bake clears this by
+# orders of magnitude. NOT a tunable cap; a sanity floor on a non-degenerate split.
+_MIN_HEALTHY_STATIC: int = 1_000
+
+
+def _blob_path(slug: str) -> Path:
+    return SAMPLES_DIR / f"{slug}.mv4d"
+
+
+def _max_dynamic_per_frame(scene) -> int:
+    """Largest per-frame dynamic point count in a decoded ``Scene4D`` (0 if none)."""
+    return max((int(p.shape[0]) for p in scene.dynamic_positions), default=0)
+
+
+@pytest.mark.parametrize("slug", CORPUS_SLUGS)
+def test_corpus_blob_static_dynamic_split_healthy(slug: str) -> None:
+    """The committed ``<slug>.mv4d`` decodes to a HEALTHY static/dynamic split.
+
+    Decodes the committed corpus blob with the backend reference wire decoder
+    (``app.wire.decoder.decode``, the exact inverse of the encoder — spec/05 §3)
+    and asserts the net-excursion split (``app/pipeline/assemble.py``) produced a
+    sane result, not the degenerate one the STALE blobs encode:
+
+    - **static-scene (C-4, the negative control):** static is substantial AND far
+      exceeds the per-frame dynamic count. The stale-blob bug is the inverse —
+      static ≈ 3, dynamic ≈ 160k per frame — i.e. a near-static mountain valley
+      classified as nearly all motion. This is the assertion that catches the bug.
+    - **the other three (C-1..C-3):** a sane static cloud exists (a stable
+      background the moving subject animates over — spec/10 §6 expected behavior).
+
+    **This test is EXPECTED-RED until ``make bake-corpus`` regenerates the stale
+    blobs** (they were baked before the split fix). That is correct — same
+    convention as the presence/license test above (RED until sourced). It MUST
+    fail *clearly* (naming the slug + the degenerate counts) rather than pass
+    vacuously; do NOT weaken it to skip-on-bad-split. If the blob is genuinely
+    ABSENT we skip cleanly (a fresh clone may have no committed corpus), but when
+    PRESENT we assert.
+    """
+    from app.wire.decoder import decode  # backend reference decoder (spec/05 §3)
+
+    blob = _blob_path(slug)
+    if not blob.is_file():
+        pytest.skip(
+            f"corpus blob absent: {blob} — bake it with `make bake-corpus` "
+            f"(spec/10 §6). Skipped only because the file is missing entirely."
+        )
+
+    scene = decode(blob.read_bytes())
+    n_static = int(scene.static_positions.shape[0])
+    max_dyn = _max_dynamic_per_frame(scene)
+
+    if slug == "static-scene":
+        # Negative control: a substantial static cloud that DOMINATES the dynamic
+        # count. The stale blob fails BOTH halves (static≈3 ≪ floor; static ≪ dyn).
+        assert n_static >= _MIN_HEALTHY_STATIC, (
+            f"negative control {slug!r}: static={n_static} is below the healthy "
+            f"floor {_MIN_HEALTHY_STATIC} — the STALE blob bakes ~3 static points "
+            f"(degenerate split). EXPECTED-RED until `make bake-corpus` regenerates "
+            f"it with the net-excursion split (app/pipeline/assemble.py)."
+        )
+        assert n_static > max_dyn, (
+            f"negative control {slug!r}: static={n_static} does NOT exceed the "
+            f"per-frame dynamic max={max_dyn} — an almost-static scene was split as "
+            f"mostly MOTION (the stale-blob bug: static≈3, dynamic≈160k/frame). "
+            f"EXPECTED-RED until `make bake-corpus` re-bakes the split."
+        )
+    else:
+        # C-1..C-3: a moving subject animates over a STABLE background, so a sane
+        # static cloud must exist (spec/10 §6 expected behavior).
+        assert n_static >= _MIN_HEALTHY_STATIC, (
+            f"corpus blob {slug!r}: static={n_static} is below the healthy floor "
+            f"{_MIN_HEALTHY_STATIC} — no stable background cloud. EXPECTED-RED until "
+            f"`make bake-corpus` regenerates the stale blob (app/pipeline/assemble.py)."
+        )

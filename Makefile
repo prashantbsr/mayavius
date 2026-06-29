@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help setup setup-frontend setup-backend dev-frontend dev-backend test test-frontend test-backend test-e2e test-mps lint typecheck
+.PHONY: help setup setup-frontend setup-backend dev-frontend dev-backend test test-frontend test-backend test-e2e test-mps lint typecheck bake-corpus
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -32,6 +32,9 @@ test-e2e: ## Run Playwright e2e (fixture-mode backend; no GPU)
 
 test-mps: ## On-device MPS smoke on the 36 GB Mac (opt-in; needs requirements-ml.txt)
 	cd backend && MAYAVIUS_RUN_MPS_SMOKE=1 ./.venv/bin/python -m pytest -m mps -s
+
+bake-corpus: ## Re-bake assets/samples/*.mv4d via the real pipeline (needs ML overlay + cached weights; re-commits the blobs). HEAVY, manual, NOT CI.
+	cd backend && ./.venv/bin/python scripts/bake_corpus.py
 
 lint: ## Lint frontend
 	cd frontend && npm run lint

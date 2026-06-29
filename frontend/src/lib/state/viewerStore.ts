@@ -58,6 +58,12 @@ type ViewerState = {
    * §7). `ProgressOverlay` renders it (spec/07 §6 step 2); `null` until the
    * loader sees a poll/SSE payload carrying it. */
   weightsLicense: string | null;
+  /** Backend job `stage` token surfaced from the poll/SSE payload (spec/06 §6
+   * `job_to_json` — e.g. "decode" / "geometry" / "tracking"). `ProgressOverlay`
+   * maps it to a friendly label so a long, pct-static pass (the VGGT geometry
+   * step) still reads as alive (spec/07 §6 step 2); `""` until the loader sees a
+   * payload carrying it, then we fall back to the `loadState` label. */
+  stage: string;
 
   // ── Actions (kept).
   setTime: (t: number) => void;
@@ -75,6 +81,9 @@ type ViewerState = {
   /** Surface the active weights-license label from job metadata (spec/07 §6
    * step 2 / §4.4 sibling). */
   setWeightsLicense: (label: string | null) => void;
+  /** Surface the active backend `stage` token from the poll/SSE payload (spec/07
+   * §6 step 2 / §4.2 sibling); `ProgressOverlay` maps it to a friendly label. */
+  setStage: (s: string) => void;
   /** Bullet-time enter: pause + freeze + `cameraMode='bulletTime'` (spec/07 §5). */
   enterBulletTime: () => void;
   /** Bullet-time exit: unfreeze + `cameraMode='orbit'`. */
@@ -94,6 +103,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   cameraMode: "orbit",
   frameCount: 0,
   weightsLicense: null,
+  stage: "",
 
   // Clamp to [0,1] — the loop and the scrubber both write here, so guard once
   // (spec/07 §4.2: a deliberately cheap, single-field transient write).
@@ -111,6 +121,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setError: (error) => set({ error }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   setWeightsLicense: (weightsLicense) => set({ weightsLicense }),
+  setStage: (stage) => set({ stage }),
   // enterBulletTime ≡ pause()+setFrozen(true)+cameraMode='bulletTime' (§5),
   // applied as a single set so the three stay consistent.
   enterBulletTime: () =>

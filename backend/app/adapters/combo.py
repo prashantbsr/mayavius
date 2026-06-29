@@ -97,10 +97,22 @@ class VggtCoTracker3Adapter(ReconstructionPort):
 
         Returns the RAW scene; the core ``ReconstructionService`` applies
         smoothing/culling/caps (spec/06 §5 steps 6-7) — NOT done here.
-        """
-        vggt = self._vggt_adapter()
-        cot = self._cot_adapter()
 
+        PROGRESS CONTRACT (frontend stage-label seam): we cannot get true
+        intra-VGGT progress without invasive model hooks (out of scope, spec/06
+        §4), so instead we emit FINER, HONESTLY-LABELED stage boundaries at the
+        seams we DO control, monotonically non-decreasing. The heavy VGGT forward
+        runs in the 0.20→0.55 span — labelled "geometry" so a long silent stretch
+        reads as "reconstructing geometry", not a frozen decode bar; the
+        first-use weight load (a cold multi-GB download) gets its OWN "loading
+        models" stage at 0.15 so it never masquerades as a stuck decode.
+        The stage tokens emitted here (in order) are:
+          ``decode`` (0.08), ``loading models`` (0.15), ``geometry`` (0.20),
+          ``geometry`` (0.55), ``tracking`` (0.60), ``tracking`` (0.82),
+          ``assembling`` (0.90), ``assembled`` (0.95).
+        The frontend maps these known tokens to friendly labels and falls back to
+        the raw token for anything else, so keep them stable + lowercase-short.
+        """
         frames = decode_and_subsample(request)  # numpy uint8 [S,3,H,W] @ width 518
         # MPS self-attention OOM guard: cap S so S·tokens-per-frame fits memory (a
         # square/high-res clip OOMs the default max_clip_frames on a 36 GB Mac;
@@ -109,18 +121,31 @@ class VggtCoTracker3Adapter(ReconstructionPort):
         if str(getattr(request, "device", "mps")) == "mps":
             frames = cap_frames_to_token_budget(frames)
         if progress is not None:
-            progress(0.10, "decode")
+            progress(0.08, "decode")
+
+        # Lazy sub-adapter construction stays torch-free, but the FIRST run_geometry
+        # may trigger a cold multi-GB weight download/load — give that its own stage
+        # so it reads as "loading model", not a frozen decode bar (spec/06 §4).
+        vggt = self._vggt_adapter()
+        cot = self._cot_adapter()
+        if progress is not None:
+            progress(0.15, "loading models")
 
         # VGGT runs ONCE; geo carries depth + camera (+ pixel intrinsics on the SAME
         # processed grid, attached by run_geometry as geo.intrinsics_px) for the lift.
+        # The heavy forward runs in the 0.20→0.55 span; we can only mark its bounds.
+        if progress is not None:
+            progress(0.20, "geometry")
         geo = vggt.run_geometry(frames, request)
         if progress is not None:
-            progress(0.55, "vggt")
+            progress(0.55, "geometry")
 
         # Feed VGGT's depth/camera/pixel-intrinsics to the CoTracker3 lift (grid
         # consistency — the SAME width-518 frames + the SAME processed (W,H) divisor,
         # spec/06 §5 step 4). ``intrinsics_px`` is attached to ``geo`` by run_geometry.
         intrinsics_px = getattr(geo, "intrinsics_px", None)
+        if progress is not None:
+            progress(0.60, "tracking")
         tr = cot.run_tracks(
             frames,
             depth=geo.depth,
@@ -128,8 +153,10 @@ class VggtCoTracker3Adapter(ReconstructionPort):
             intrinsics_px=intrinsics_px,
         )
         if progress is not None:
-            progress(0.80, "tracking")
+            progress(0.82, "tracking")
 
+        if progress is not None:
+            progress(0.90, "assembling")
         scene = assemble_scene4d(
             geo, tr, request, motion_thresh=self._motion_thresh()
         )  # RAW Scene4D (split done here; smooth/cull/caps stay in the SERVICE)

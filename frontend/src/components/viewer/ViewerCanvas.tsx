@@ -51,7 +51,7 @@ export function ViewerCanvas({ resultId }: { resultId: string }) {
         <CameraRig controlsRef={controlsRef} />
         <OrbitControls ref={controlsRef} makeDefault />
       </Canvas>
-      <ViewerOverlay />
+      <ViewerOverlay resultId={resultId} />
     </div>
   );
 }

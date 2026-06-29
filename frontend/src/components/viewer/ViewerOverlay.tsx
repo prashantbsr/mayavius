@@ -4,6 +4,7 @@ import { Timeline } from "./ui/Timeline";
 import { PlaybackControls } from "./ui/PlaybackControls";
 import { BulletTimeButton } from "./ui/BulletTimeButton";
 import { ProgressOverlay } from "./ui/ProgressOverlay";
+import { CopyLinkButton } from "./ui/CopyLinkButton";
 
 // ViewerOverlay — the DOM HUD positioned OVER the WebGL canvas (spec/07 §1
 // component tree: a DOM layer, NOT in WebGL). It imports NEITHER three NOR any
@@ -11,15 +12,24 @@ import { ProgressOverlay } from "./ui/ProgressOverlay";
 // the viewer ONLY through the Zustand store. This is what lets a Path-2
 // <SplatMesh> mount at the Scene.tsx seam without touching a single control.
 //
-// Layout: the bottom control bar (timeline + playback + bullet-time) plus the
-// centered ProgressOverlay that covers the canvas until the scene is `ready`.
-// The container is pointer-events:none so orbit/scrub on the canvas isn't
-// blocked; only the interactive widgets re-enable pointer events.
-export function ViewerOverlay() {
+// Layout: the bottom control bar (timeline + playback + bullet-time), the
+// top-right share affordance (CopyLinkButton — the virality surface, handover
+// §4.4), plus the centered ProgressOverlay that covers the canvas until the
+// scene is `ready`. The container is pointer-events:none so orbit/scrub on the
+// canvas isn't blocked; only the interactive widgets re-enable pointer events.
+//
+// `resultId` flows in from ViewerCanvas (the one place WebGL + DOM meet) so the
+// share button can build the `/view/[id]` link without reading the store.
+export function ViewerOverlay({ resultId }: { resultId: string }) {
   return (
     <div className="pointer-events-none absolute inset-0">
       {/* Centered load/progress card (clears itself once loadState==='ready'). */}
       <ProgressOverlay />
+
+      {/* Top-right share affordance — re-enables pointer events on itself. */}
+      <div className="pointer-events-auto absolute right-0 top-0 p-4">
+        <CopyLinkButton resultId={resultId} />
+      </div>
 
       {/* Bottom control bar. */}
       <div className="pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col gap-2 bg-gradient-to-t from-black/70 to-transparent p-4">

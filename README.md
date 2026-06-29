@@ -2,10 +2,14 @@
 
 > [!IMPORTANT]  
 > This is more of a learning project right now. Please don't be surprised by unusual content in the code and lack of structure. You may find lots of issues. But you can still contribute. I hope you like it.
+> It froze my 36GB M4 Max Macbook Pro multiple times.
+
+This is an experimental implementation of D4RT paper by Google.
+What this thing do (in plain language): Run the app, upload a video, some stuff will be done on it (the mayavius part), after completion you can interact with the video like you do in a video game. But it's all point-cloud. So it looks primitive.
+As I said above, it's a learning project.
 
 > **Drop in a short video → orbit, scrub, and bullet-time-freeze an interactive
-> 4D point-cloud reconstruction of the scene, right in your browser, shareable
-> as a URL.**
+> 4D point-cloud reconstruction of the scene, right in your browser.
 
 Open-source, lightweight, interactive: **no GPU required to *view***, running
 the actual frontier 4D research models on your own clip. Upload a few seconds of
